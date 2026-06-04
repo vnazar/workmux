@@ -139,6 +139,7 @@ pub fn run(
             new_window,
             mode_override,
             file_only_prompt,
+            None,
         ) {
             Ok(result) => {
                 let target_type = match result.mode {

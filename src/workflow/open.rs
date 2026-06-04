@@ -12,7 +12,9 @@ use super::setup;
 use super::types::{CreateResult, SetupOptions};
 use crate::config::MuxMode;
 
-/// Open a tmux window for an existing worktree
+/// Open a tmux window for an existing worktree.
+///
+/// The optional agent argument overrides the configured agent for pane setup.
 pub fn open(
     name: &str,
     context: &WorkflowContext,
@@ -20,6 +22,7 @@ pub fn open(
     new_window: bool,
     mode_override: Option<MuxMode>,
     prompt_file_only: Option<&Prompt>,
+    agent: Option<&str>,
 ) -> Result<CreateResult> {
     info!(
         name = name,
@@ -379,7 +382,7 @@ pub fn open(
         &worktree_path,
         &context.config,
         &options_with_workdir,
-        None,
+        agent,
         after_window,
     )?;
     info!(

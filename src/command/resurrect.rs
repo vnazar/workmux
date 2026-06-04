@@ -85,7 +85,15 @@ pub fn run(dry_run: bool) -> Result<()> {
             "resurrect:exec opening worktree"
         );
 
-        match workflow::open(&candidate.handle, &context, options, false, None, None) {
+        match workflow::open(
+            &candidate.handle,
+            &context,
+            options,
+            false,
+            None,
+            None,
+            candidate.agent.as_deref(),
+        ) {
             Ok(result) => {
                 info!(
                     handle = candidate.handle,

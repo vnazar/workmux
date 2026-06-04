@@ -756,7 +756,7 @@ impl App {
 
         let mut options = workflow::types::SetupOptions::new(false, false, true);
         options.mode = self.config.mode();
-        if workflow::open(&handle, &ctx, options, false, None, None).is_ok() {
+        if workflow::open(&handle, &ctx, options, false, None, None, None).is_ok() {
             self.should_jump = true;
         }
     }

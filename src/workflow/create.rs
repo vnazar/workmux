@@ -188,6 +188,7 @@ pub fn create(context: &WorkflowContext, args: CreateArgs) -> Result<CreateResul
             false,
             mode_override,
             file_only_prompt,
+            agent,
         );
     }
 
