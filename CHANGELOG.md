@@ -22,6 +22,13 @@ description: Release notes and version history for workmux
 
 # Changelog
 
+## v0.1.212 (2026-06-06)
+
+- Add an uninstall script that removes workmux hooks, bundled skills, cache, and state data while preserving unrelated agent configuration.
+- Add `workmux reap-agents` to find stale tracked agents and optionally stop their agent process without tearing down the pane.
+- Fix `workmux resurrect` so worktrees that used a non-default agent resume with the same agent after a crash. ([#175](https://github.com/raine/workmux/issues/175))
+- Fix `workmux remove` leaving stale tmux windows behind in some cleanup cases.
+
 ## v0.1.211 (2026-05-22)
 
 - Respect each repository's configured base branch when adding worktrees from the dashboard.
