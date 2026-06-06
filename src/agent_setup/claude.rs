@@ -87,6 +87,10 @@ pub fn uninstall() -> Result<String> {
     let Some(path) = settings_path() else {
         return Ok("Claude Code config dir not found, nothing to uninstall".to_string());
     };
+    uninstall_at(path)
+}
+
+fn uninstall_at(path: PathBuf) -> Result<String> {
     if !path.exists() {
         return Ok("No Claude Code settings.json found".to_string());
     }
@@ -406,5 +410,63 @@ mod tests {
         // All 4 events should be present
         let hooks = settings.get("hooks").unwrap().as_object().unwrap();
         assert_eq!(hooks.len(), 4);
+    }
+
+    #[test]
+    fn test_uninstall_no_settings_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        let result = uninstall_at(settings_path).unwrap();
+        assert!(result.contains("No Claude Code settings.json"));
+    }
+
+    #[test]
+    fn test_uninstall_no_hooks_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(&settings_path, r#"{"someSetting": true}"#).unwrap();
+        let result = uninstall_at(settings_path).unwrap();
+        assert!(result.contains("No workmux hooks found"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_hooks_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]},{"hooks":[{"type":"command","command":"afplay /System/Library/Sounds/Glass.aiff"}]}]}}"#,
+        )
+        .unwrap();
+        let result = uninstall_at(settings_path.clone()).unwrap();
+        assert!(result.contains("Removed workmux hooks"), "result: {result}");
+        // Verify the user hook is preserved
+        let content = std::fs::read_to_string(&settings_path).unwrap();
+        let settings: Value = serde_json::from_str(&content).unwrap();
+        let stop = settings["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1);
+        assert!(
+            stop[0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains("Glass")
+        );
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]}]}}"#,
+        )
+        .unwrap();
+        // First run
+        let result1 = uninstall_at(settings_path.clone()).unwrap();
+        assert!(result1.contains("Removed workmux hooks"));
+        // Second run -- noop
+        let result2 = uninstall_at(settings_path).unwrap();
+        assert!(result2.contains("No workmux hooks found"));
     }
 }

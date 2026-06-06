@@ -15,6 +15,9 @@ use crate::agent_setup::hooks;
 const HOOKS_JSON: &str = include_str!("../../resources/gemini/settings.json");
 
 fn gemini_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("GEMINI_CONFIG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     home::home_dir().map(|h| h.join(".gemini"))
 }
 
@@ -60,6 +63,10 @@ pub fn uninstall() -> Result<String> {
     let Some(path) = settings_path() else {
         return Ok("Gemini CLI config dir not found, nothing to uninstall".to_string());
     };
+    uninstall_at(path)
+}
+
+fn uninstall_at(path: PathBuf) -> Result<String> {
     if !path.exists() {
         return Ok("No Gemini CLI settings.json found".to_string());
     }
@@ -295,5 +302,51 @@ mod tests {
         // All 5 events should be present
         let hooks = config.get("hooks").unwrap().as_object().unwrap();
         assert_eq!(hooks.len(), 5);
+    }
+
+    #[test]
+    fn test_uninstall_no_settings_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        let result = uninstall_at(settings_path).unwrap();
+        assert!(result.contains("No Gemini CLI settings.json"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_hooks_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"hooks":{"AfterAgent":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]},{"hooks":[{"type":"command","command":"python3 my-hook.py"}]}]}}"#,
+        )
+        .unwrap();
+        let result = uninstall_at(settings_path.clone()).unwrap();
+        assert!(result.contains("Removed workmux hooks"));
+        let content = std::fs::read_to_string(&settings_path).unwrap();
+        let config: Value = serde_json::from_str(&content).unwrap();
+        let after = config["hooks"]["AfterAgent"].as_array().unwrap();
+        assert_eq!(after.len(), 1);
+        assert!(
+            after[0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains("my-hook")
+        );
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let settings_path = tmp.path().join("settings.json");
+        std::fs::write(
+            &settings_path,
+            r#"{"hooks":{"AfterAgent":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]}]}}"#,
+        )
+        .unwrap();
+        let result1 = uninstall_at(settings_path.clone()).unwrap();
+        assert!(result1.contains("Removed workmux hooks"));
+        let result2 = uninstall_at(settings_path).unwrap();
+        assert!(result2.contains("No workmux hooks found"));
     }
 }

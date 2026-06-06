@@ -17,6 +17,9 @@ use super::StatusCheck;
 const HOOKS_JSON: &str = include_str!("../../.github/hooks/workmux-status/hooks.json");
 
 fn copilot_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("COPILOT_CONFIG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     home::home_dir().map(|h| h.join(".copilot"))
 }
 
@@ -92,7 +95,10 @@ pub fn uninstall() -> Result<String> {
         Ok(r) => r,
         Err(_) => return Ok("Not in a git repository, nothing to uninstall".to_string()),
     };
+    uninstall_at(root)
+}
 
+fn uninstall_at(root: PathBuf) -> Result<String> {
     let hooks_dir = root.join(".github/hooks/workmux-status");
     if hooks_dir.exists() {
         fs::remove_dir_all(&hooks_dir)?;
@@ -128,5 +134,39 @@ mod tests {
     #[test]
     fn test_hooks_json_contains_workmux_command() {
         assert!(HOOKS_JSON.contains("workmux set-window-status"));
+    }
+
+    #[test]
+    fn test_uninstall_no_hooks_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("No Copilot hooks found"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_hooks_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_dir = tmp.path().join(".github/hooks/workmux-status");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::write(hooks_dir.join("hooks.json"), "{}").unwrap();
+
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("Removed .github/hooks/workmux-status"));
+
+        // Verify directory is gone
+        assert!(!hooks_dir.exists());
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_dir = tmp.path().join(".github/hooks/workmux-status");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::write(hooks_dir.join("hooks.json"), "{}").unwrap();
+
+        let result1 = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result1.contains("Removed"));
+        let result2 = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result2.contains("No Copilot hooks found"));
     }
 }

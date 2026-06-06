@@ -99,16 +99,22 @@ pub fn install() -> Result<String> {
 /// package.json, only removes it if it matches the bundled content
 /// exactly (preserving user-modified package.json).
 pub fn uninstall() -> Result<String> {
+    let Some(config_dir) = opencode_config_dir() else {
+        return Ok("No OpenCode config directory found".to_string());
+    };
+    uninstall_at(config_dir)
+}
+
+fn uninstall_at(config_dir: PathBuf) -> Result<String> {
     let mut removed = Vec::new();
 
     // Remove plugin file (new location: plugins/workmux-status.ts)
-    if let Some(path) = plugin_path()
-        && path.exists()
-    {
-        fs::remove_file(&path)?;
-        removed.push(path.display().to_string());
+    let plugin_path = config_dir.join("plugins/workmux-status.ts");
+    if plugin_path.exists() {
+        fs::remove_file(&plugin_path)?;
+        removed.push(plugin_path.display().to_string());
         // Clean up empty plugins directory
-        if let Some(parent) = path.parent()
+        if let Some(parent) = plugin_path.parent()
             && parent.read_dir().is_ok_and(|mut it| it.next().is_none())
         {
             let _ = fs::remove_dir(parent);
@@ -116,17 +122,15 @@ pub fn uninstall() -> Result<String> {
     }
 
     // Remove legacy plugin file (plugin/workmux-status.ts)
-    if let Some(path) = legacy_plugin_path()
-        && path.exists()
-    {
-        fs::remove_file(&path)?;
-        removed.push(path.display().to_string());
+    let legacy_path = config_dir.join("plugin/workmux-status.ts");
+    if legacy_path.exists() {
+        fs::remove_file(&legacy_path)?;
+        removed.push(legacy_path.display().to_string());
     }
 
     // Handle package.json: only remove if it matches what we installed exactly
-    if let Some(pkg_path) = package_json_path()
-        && pkg_path.exists()
-    {
+    let pkg_path = config_dir.join("package.json");
+    if pkg_path.exists() {
         let content = fs::read_to_string(&pkg_path)?;
         // Parse both as JSON for semantic comparison (ignores formatting)
         if let (Ok(installed), Ok(existing)) = (
@@ -146,5 +150,64 @@ pub fn uninstall() -> Result<String> {
             "Removed OpenCode plugin files: {}",
             removed.join(", ")
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uninstall_no_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("No OpenCode plugin files found"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_plugin_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path().join("plugins");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(plugin_dir.join("workmux-status.ts"), "// plugin code").unwrap();
+
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("Removed OpenCode plugin files"));
+        assert!(!plugin_dir.join("workmux-status.ts").exists());
+    }
+
+    #[test]
+    fn test_uninstall_removes_package_json_if_matches_bundled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path().join("plugins");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(plugin_dir.join("workmux-status.ts"), "// plugin code").unwrap();
+        std::fs::write(tmp.path().join("package.json"), PACKAGE_JSON).unwrap();
+
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("Removed OpenCode plugin files"));
+        assert!(!tmp.path().join("package.json").exists());
+    }
+
+    #[test]
+    fn test_uninstall_keeps_modified_package_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugin_dir = tmp.path().join("plugins");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(plugin_dir.join("workmux-status.ts"), "// plugin code").unwrap();
+        std::fs::write(tmp.path().join("package.json"), r#"{"name": "custom"}"#).unwrap();
+
+        let result = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result.contains("Removed OpenCode plugin files"));
+        assert!(tmp.path().join("package.json").exists());
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result1 = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result1.contains("No OpenCode plugin files found"));
+        let result2 = uninstall_at(tmp.path().to_path_buf()).unwrap();
+        assert!(result2.contains("No OpenCode plugin files found"));
     }
 }

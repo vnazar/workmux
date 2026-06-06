@@ -75,6 +75,10 @@ pub fn uninstall() -> Result<String> {
     let Some(path) = extension_path() else {
         return Ok("pi config dir not found, nothing to uninstall".to_string());
     };
+    uninstall_at(path)
+}
+
+fn uninstall_at(path: PathBuf) -> Result<String> {
     if !path.exists() {
         return Ok("No pi extension found".to_string());
     }
@@ -86,4 +90,40 @@ pub fn uninstall() -> Result<String> {
         let _ = fs::remove_dir(parent);
     }
     Ok(format!("Removed pi extension at {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_uninstall_no_extension_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ext_path = tmp.path().join("extensions/workmux-status.ts");
+        let result = uninstall_at(ext_path).unwrap();
+        assert!(result.contains("No pi extension found"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_extension_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ext_dir = tmp.path().join("extensions");
+        std::fs::create_dir_all(&ext_dir).unwrap();
+        let ext_path = ext_dir.join("workmux-status.ts");
+        std::fs::write(&ext_path, "// extension").unwrap();
+
+        let result = uninstall_at(ext_path.clone()).unwrap();
+        assert!(result.contains("Removed pi extension"));
+        assert!(!ext_path.exists());
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ext_path = tmp.path().join("extensions/workmux-status.ts");
+        let result1 = uninstall_at(ext_path.clone()).unwrap();
+        assert!(result1.contains("No pi extension found"));
+        let result2 = uninstall_at(ext_path).unwrap();
+        assert!(result2.contains("No pi extension found"));
+    }
 }

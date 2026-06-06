@@ -206,6 +206,10 @@ pub fn remove_skills(agent: Agent) -> Result<String> {
     let Some(base_dir) = skills_dir(agent) else {
         return Ok(format!("{} does not support skills", agent.name()));
     };
+    remove_skills_at(base_dir, agent.name())
+}
+
+fn remove_skills_at(base_dir: PathBuf, agent_name: &str) -> Result<String> {
     if !base_dir.exists() {
         return Ok(format!(
             "No skills directory found at {}",
@@ -253,7 +257,7 @@ pub fn remove_skills(agent: Agent) -> Result<String> {
 
     Ok(format!(
         "Skills for {} ({}): {}",
-        agent.name(),
+        agent_name,
         base_dir.display(),
         parts.join(", ")
     ))
@@ -320,12 +324,24 @@ mod tests {
 
     #[test]
     fn test_skills_dir_claude_respects_env() {
-        let dir = skills_dir_with_env(Agent::Claude, Path::new("/home/test"), |key| {
-            (key == "CLAUDE_CONFIG_DIR").then(|| OsString::from("/tmp/workmux-test-claude-cfg"))
-        })
-        .unwrap();
-
+        // Safety: serial within this test; we restore the original value.
+        let prev = std::env::var_os("CLAUDE_CONFIG_DIR");
+        // SAFETY: tests in this module that read CLAUDE_CONFIG_DIR are
+        // intentionally isolated; cargo test runs may interleave, but no
+        // other test in this crate mutates this var.
+        unsafe {
+            std::env::set_var("CLAUDE_CONFIG_DIR", "/tmp/workmux-test-claude-cfg");
+        }
+        let dir = skills_dir(Agent::Claude).unwrap();
         assert_eq!(dir, PathBuf::from("/tmp/workmux-test-claude-cfg/skills"));
+        match prev {
+            Some(v) => unsafe {
+                std::env::set_var("CLAUDE_CONFIG_DIR", v);
+            },
+            None => unsafe {
+                std::env::remove_var("CLAUDE_CONFIG_DIR");
+            },
+        }
     }
 
     #[test]
@@ -360,5 +376,97 @@ mod tests {
         assert!(names.contains(&"coordinator"));
         assert!(names.contains(&"open-pr"));
         assert!(names.contains(&"workmux"));
+    }
+
+    #[test]
+    fn test_remove_skills_none_found() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_base = tmp.path().join("skills");
+        std::fs::create_dir_all(&skills_base).unwrap();
+
+        let result = remove_skills_at(skills_base, "Claude Code").unwrap();
+        assert!(result.contains("none found"));
+    }
+
+    #[test]
+    fn test_remove_skills_removes_bundled_skills() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_base = tmp.path().join("skills");
+        std::fs::create_dir_all(&skills_base).unwrap();
+
+        // Write one bundled skill with exact content
+        let skill = &BUNDLED_SKILLS[0];
+        let skill_dir = skills_base.join(skill.name);
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(skill_dir.join("SKILL.md"), skill.content).unwrap();
+
+        let result = remove_skills_at(skills_base, "Claude Code").unwrap();
+        assert!(result.contains("1 removed"));
+        assert!(!skill_dir.exists());
+    }
+
+    #[test]
+    fn test_remove_skills_skips_modified_skills() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_base = tmp.path().join("skills");
+        std::fs::create_dir_all(&skills_base).unwrap();
+
+        // Write a modified version of a bundled skill
+        let skill = &BUNDLED_SKILLS[0];
+        let skill_dir = skills_base.join(skill.name);
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(skill_dir.join("SKILL.md"), "modified content").unwrap();
+
+        let result = remove_skills_at(skills_base, "Claude Code").unwrap();
+        assert!(result.contains("1 skipped (modified)"));
+        assert!(skill_dir.exists());
+    }
+
+    #[test]
+    fn test_remove_skills_mixed_bundled_and_modified() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_base = tmp.path().join("skills");
+        std::fs::create_dir_all(&skills_base).unwrap();
+
+        // Write first bundled skill exactly (will be removed)
+        let s1 = &BUNDLED_SKILLS[0];
+        let d1 = skills_base.join(s1.name);
+        std::fs::create_dir_all(&d1).unwrap();
+        std::fs::write(d1.join("SKILL.md"), s1.content).unwrap();
+
+        // Write second bundled skill modified (will be skipped)
+        let s2 = &BUNDLED_SKILLS[1];
+        let d2 = skills_base.join(s2.name);
+        std::fs::create_dir_all(&d2).unwrap();
+        std::fs::write(d2.join("SKILL.md"), "modified content").unwrap();
+
+        let result = remove_skills_at(skills_base, "Claude Code").unwrap();
+        assert!(result.contains("1 removed"));
+        assert!(result.contains("1 skipped (modified)"));
+        assert!(!d1.exists());
+        assert!(d2.exists());
+    }
+
+    #[test]
+    fn test_remove_skills_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_base = tmp.path().join("skills");
+        // Dir doesn't exist -- both calls return "No skills directory found"
+        let result1 = remove_skills_at(skills_base.clone(), "Claude Code").unwrap();
+        assert!(
+            result1.contains("No skills directory found"),
+            "result1: {result1}"
+        );
+        let result2 = remove_skills_at(skills_base, "Claude Code").unwrap();
+        assert!(
+            result2.contains("No skills directory found"),
+            "result2: {result2}"
+        );
+    }
+
+    #[test]
+    fn test_remove_skills_unsupported_agent() {
+        let result = remove_skills(Agent::Codex).unwrap();
+        assert!(result.contains("does not support skills"));
     }
 }

@@ -21,6 +21,9 @@ use crate::agent_setup::hooks;
 const HOOKS_JSON: &str = include_str!("../../.codex/hooks/workmux-status.json");
 
 fn codex_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("CODEX_CONFIG_DIR") {
+        return Some(PathBuf::from(dir));
+    }
     home::home_dir().map(|h| h.join(".codex"))
 }
 
@@ -66,7 +69,10 @@ pub fn uninstall() -> Result<String> {
     let Some(path) = hooks_path() else {
         return Ok("Codex dir not found, nothing to uninstall".to_string());
     };
+    uninstall_at(path)
+}
 
+fn uninstall_at(path: PathBuf) -> Result<String> {
     let mut messages = Vec::new();
 
     if path.exists() {
@@ -88,6 +94,8 @@ pub fn uninstall() -> Result<String> {
         } else {
             messages.push("No workmux hooks found in Codex hooks.json".to_string());
         }
+    } else {
+        messages.push("No Codex hooks.json found".to_string());
     }
 
     Ok(messages.join("; "))
@@ -430,5 +438,67 @@ mod tests {
     #[test]
     fn test_is_hooks_feature_enabled_no_features_section() {
         assert!(!is_hooks_feature_enabled("[model]\ndefault = \"gpt-4\"\n"));
+    }
+
+    #[test]
+    fn test_uninstall_no_hooks_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_path = tmp.path().join("hooks.json");
+        let result = uninstall_at(hooks_path).unwrap();
+        assert!(result.contains("No Codex hooks.json found"));
+    }
+
+    #[test]
+    fn test_uninstall_removes_hooks_keeps_others() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_path = tmp.path().join("hooks.json");
+        std::fs::write(
+            &hooks_path,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]},{"hooks":[{"type":"command","command":"python3 my-hook.py"}]}]}}"#,
+        )
+        .unwrap();
+        let result = uninstall_at(hooks_path.clone()).unwrap();
+        assert!(result.contains("Removed workmux hooks"));
+        assert!(hooks_path.exists());
+        let content = std::fs::read_to_string(&hooks_path).unwrap();
+        let config: Value = serde_json::from_str(&content).unwrap();
+        let stop = config["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1);
+        assert!(
+            stop[0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap()
+                .contains("my-hook")
+        );
+    }
+
+    #[test]
+    fn test_uninstall_deletes_file_when_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_path = tmp.path().join("hooks.json");
+        std::fs::write(
+            &hooks_path,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]}]}}"#,
+        )
+        .unwrap();
+        let result = uninstall_at(hooks_path.clone()).unwrap();
+        assert!(result.contains("no hooks remain"));
+        assert!(!hooks_path.exists());
+    }
+
+    #[test]
+    fn test_uninstall_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks_path = tmp.path().join("hooks.json");
+        std::fs::write(
+            &hooks_path,
+            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"workmux set-window-status done"}]}]}}"#,
+        )
+        .unwrap();
+        let result1 = uninstall_at(hooks_path.clone()).unwrap();
+        assert!(result1.contains("no hooks remain"));
+        assert!(!hooks_path.exists());
+        let result2 = uninstall_at(hooks_path).unwrap();
+        assert!(result2.contains("No Codex"), "result2: {result2}");
     }
 }
