@@ -49,24 +49,27 @@ pub fn remove_workmux_hooks(settings: &mut Value) -> bool {
             continue;
         };
 
-        groups_arr.retain(|group| {
-            let has_workmux =
-                group
-                    .get("hooks")
-                    .and_then(|h| h.as_array())
-                    .is_some_and(|entries| {
-                        entries.iter().any(|e| {
-                            e.get("command")
-                                .and_then(|c| c.as_str())
-                                .is_some_and(|c| c.contains("workmux set-window-status"))
-                        })
-                    });
-            if has_workmux {
-                modified = true;
-                false
-            } else {
-                true
+        // For each group, remove only workmux hooks from its inner hooks array
+        for group in groups_arr.iter_mut() {
+            if let Some(hooks_list) = group.get_mut("hooks").and_then(|h| h.as_array_mut()) {
+                let len_before = hooks_list.len();
+                hooks_list.retain(|e| {
+                    !e.get("command")
+                        .and_then(|c| c.as_str())
+                        .is_some_and(|c| c.contains("workmux set-window-status"))
+                });
+                if hooks_list.len() < len_before {
+                    modified = true;
+                }
             }
+        }
+
+        // Remove groups that now have empty hooks arrays
+        groups_arr.retain(|group| {
+            group
+                .get("hooks")
+                .and_then(|h| h.as_array())
+                .is_some_and(|h| !h.is_empty())
         });
 
         if groups_arr.is_empty() {
@@ -223,6 +226,31 @@ mod tests {
         remove_empty_hooks_wrapper(&mut settings);
         // Empty hooks object should be removed
         assert!(settings.get("hooks").is_none());
+    }
+
+    #[test]
+    fn test_remove_workmux_hooks_mixed_in_same_group() {
+        let mut settings = json!({
+            "hooks": {
+                "Stop": [{
+                    "hooks": [
+                        { "type": "command", "command": "workmux set-window-status done" },
+                        { "type": "command", "command": "afplay /System/Library/Sounds/Glass.aiff" },
+                        { "type": "command", "command": "echo user-hook" }
+                    ]
+                }]
+            }
+        });
+
+        assert!(remove_workmux_hooks(&mut settings));
+
+        // The group should still exist with non-workmux hooks preserved
+        let stop = settings["hooks"]["Stop"].as_array().unwrap();
+        assert_eq!(stop.len(), 1);
+        let hooks = stop[0]["hooks"].as_array().unwrap();
+        assert_eq!(hooks.len(), 2);
+        assert!(hooks[0]["command"].as_str().unwrap().contains("Glass"));
+        assert!(hooks[1]["command"].as_str().unwrap().contains("echo"));
     }
 
     #[test]

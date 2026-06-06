@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use console::style;
 
 use crate::agent_setup::{self, Agent};
@@ -17,6 +17,8 @@ pub fn run(dry_run: bool) -> Result<()> {
     }
     println!();
 
+    let mut errors: Vec<String> = Vec::new();
+
     // Phase 1: Status tracking hooks (try ALL agents, not just detected ones)
     println!("  {} Status tracking hooks", style("●").dim());
     for agent in Agent::all() {
@@ -31,7 +33,10 @@ pub fn run(dry_run: bool) -> Result<()> {
             let result = agent_setup::uninstall_one(agent);
             match result {
                 Ok(msg) => println!("    {} {:12} {}", style("~").dim(), agent.name(), msg),
-                Err(e) => println!("    {} {:12} {}", style("~").yellow(), agent.name(), e),
+                Err(e) => {
+                    println!("    {} {:12} {}", style("~").yellow(), agent.name(), e);
+                    errors.push(format!("{} hooks: {e}", agent.name()));
+                }
             }
         }
     }
@@ -52,7 +57,10 @@ pub fn run(dry_run: bool) -> Result<()> {
                 let result = skills::remove_skills(agent);
                 match result {
                     Ok(msg) => println!("    {} {:12} {}", style("~").dim(), agent.name(), msg),
-                    Err(e) => println!("    {} {:12} {}", style("~").yellow(), agent.name(), e),
+                    Err(e) => {
+                        println!("    {} {:12} {}", style("~").yellow(), agent.name(), e);
+                        errors.push(format!("{} skills: {e}", agent.name()));
+                    }
                 }
             }
         }
@@ -81,12 +89,15 @@ pub fn run(dry_run: bool) -> Result<()> {
                             label.to_lowercase(),
                             path.display()
                         ),
-                        Err(e) => println!(
-                            "    {} Failed to remove {}: {}",
-                            style("~").yellow(),
-                            label.to_lowercase(),
-                            e
-                        ),
+                        Err(e) => {
+                            println!(
+                                "    {} Failed to remove {}: {}",
+                                style("~").yellow(),
+                                label.to_lowercase(),
+                                e
+                            );
+                            errors.push(format!("{label} directory: {e}"));
+                        }
                     }
                 }
             }
@@ -97,6 +108,14 @@ pub fn run(dry_run: bool) -> Result<()> {
             ),
             Err(e) => println!("    {} Could not resolve: {}", style("~").yellow(), e),
         }
+    }
+
+    if !errors.is_empty() {
+        return Err(anyhow!(
+            "uninstall completed with {} error(s): {}",
+            errors.len(),
+            errors.join("; ")
+        ));
     }
 
     Ok(())
