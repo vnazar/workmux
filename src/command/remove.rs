@@ -497,5 +497,7 @@ fn remove_worktree(handle: &str, force: bool, keep_branch: bool) -> Result<()> {
         );
     }
 
+    super::sidebar::request_refresh();
+
     Ok(())
 }
