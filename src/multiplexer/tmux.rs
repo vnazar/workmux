@@ -758,7 +758,7 @@ impl Multiplexer for TmuxBackend {
         self.tmux_cmd(&["send-keys", "-t", pane_id, key])
     }
 
-    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+    fn paste_text(&self, pane_id: &str, content: &str) -> Result<()> {
         use std::io::Write;
 
         let mut child = std::process::Command::new("tmux")
@@ -780,7 +780,11 @@ impl Multiplexer for TmuxBackend {
             return Err(anyhow::anyhow!("tmux load-buffer failed"));
         }
 
-        self.tmux_cmd(&["paste-buffer", "-t", pane_id, "-p", "-d"])?;
+        self.tmux_cmd(&["paste-buffer", "-t", pane_id, "-p", "-d"])
+    }
+
+    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+        self.paste_text(pane_id, content)?;
 
         // Small delay to let the application process the bracketed paste before sending Enter
         thread::sleep(Duration::from_millis(100));

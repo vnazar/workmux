@@ -379,6 +379,15 @@ impl App {
         }
     }
 
+    /// Paste text to the selected agent's pane.
+    pub fn paste_text_to_selected(&self, text: &str) {
+        if let Some(selected) = self.table_state.selected()
+            && let Some(agent) = self.agents.get(selected)
+        {
+            let _ = self.mux.paste_text(&agent.pane_id, text);
+        }
+    }
+
     pub fn format_duration(&self, secs: u64) -> String {
         agent::format_duration(secs)
     }

@@ -109,7 +109,7 @@ The bottom half of the dashboard shows a live preview of the selected agent's te
 
 ## Input mode
 
-Press `i` to enter input mode, which forwards your keystrokes directly to the selected agent's pane. This lets you respond to agent prompts without leaving the dashboard. Press `Esc` to exit input mode and return to normal navigation.
+Press `i` to enter input mode, which forwards your keystrokes and pasted text directly to the selected agent's pane. This lets you respond to agent prompts without leaving the dashboard. Press `Esc` to exit input mode and return to normal navigation.
 
 ## Sort modes
 

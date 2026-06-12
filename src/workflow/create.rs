@@ -872,7 +872,7 @@ mod tests {
             Ok(())
         }
 
-        fn paste_multiline(&self, _pane_id: &str, _content: &str) -> Result<()> {
+        fn paste_text(&self, _pane_id: &str, _content: &str) -> Result<()> {
             Ok(())
         }
 

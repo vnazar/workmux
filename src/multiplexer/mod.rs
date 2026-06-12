@@ -304,8 +304,14 @@ pub trait Multiplexer: Send + Sync {
     /// Send a single key to a pane
     fn send_key(&self, pane_id: &str, key: &str) -> Result<()>;
 
+    /// Paste text to a pane.
+    fn paste_text(&self, pane_id: &str, content: &str) -> Result<()>;
+
     /// Paste multiline content to a pane (using bracketed paste)
-    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()>;
+    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+        self.paste_text(pane_id, content)?;
+        self.send_key(pane_id, "Enter")
+    }
 
     /// Clear the pane screen. Default is no-op; backends override if needed.
     fn clear_pane(&self, _pane_id: &str) -> Result<()> {
