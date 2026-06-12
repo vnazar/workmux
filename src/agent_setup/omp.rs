@@ -6,8 +6,9 @@
 //! Installs extension by writing `workmux-status.ts` to the extensions directory.
 
 use anyhow::{Context, Result};
+use std::ffi::OsString;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::StatusCheck;
 
@@ -15,7 +16,27 @@ use super::StatusCheck;
 const EXTENSION_SOURCE: &str = include_str!("../../.omp/extensions/workmux-status.ts");
 
 fn omp_agent_dir() -> Option<PathBuf> {
-    home::home_dir().map(|h| h.join(".omp/agent"))
+    let home = home::home_dir()?;
+    Some(omp_agent_dir_with_env(&home, |key| std::env::var_os(key)))
+}
+
+pub(crate) fn omp_agent_dir_with_env(
+    home: &Path,
+    get_env: impl Fn(&str) -> Option<OsString>,
+) -> PathBuf {
+    if let Some(dir) = get_env("PI_CODING_AGENT_DIR") {
+        return PathBuf::from(dir);
+    }
+
+    let config_dir = get_env("PI_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".omp"));
+
+    if config_dir.is_absolute() {
+        config_dir.join("agent")
+    } else {
+        home.join(config_dir).join("agent")
+    }
 }
 
 fn extension_path() -> Option<PathBuf> {
@@ -99,6 +120,31 @@ mod tests {
         assert!(EXTENSION_SOURCE.contains("pi.on(\"tool_call\""));
         assert!(EXTENSION_SOURCE.contains("event.toolName === \"ask\""));
         assert!(EXTENSION_SOURCE.contains("setStatus(\"waiting\")"));
+    }
+
+    #[test]
+    fn test_omp_agent_dir_default() {
+        let dir = omp_agent_dir_with_env(Path::new("/home/test"), |_| None);
+
+        assert_eq!(dir, PathBuf::from("/home/test/.omp/agent"));
+    }
+
+    #[test]
+    fn test_omp_agent_dir_respects_pi_config_dir() {
+        let dir = omp_agent_dir_with_env(Path::new("/home/test"), |key| {
+            (key == "PI_CONFIG_DIR").then(|| OsString::from("custom-omp"))
+        });
+
+        assert_eq!(dir, PathBuf::from("/home/test/custom-omp/agent"));
+    }
+
+    #[test]
+    fn test_omp_agent_dir_respects_pi_coding_agent_dir() {
+        let dir = omp_agent_dir_with_env(Path::new("/home/test"), |key| {
+            (key == "PI_CODING_AGENT_DIR").then(|| OsString::from("/tmp/omp-agent"))
+        });
+
+        assert_eq!(dir, PathBuf::from("/tmp/omp-agent"));
     }
 
     #[test]

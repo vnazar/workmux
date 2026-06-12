@@ -71,7 +71,9 @@ fn skills_dir_with_env(
                 .unwrap_or_else(|| home.join(".pi/agent"));
             Some(pi_dir.join("skills"))
         }
-        Agent::Omp => Some(home.join(".omp/agent/skills")),
+        Agent::Omp => {
+            Some(crate::agent_setup::omp::omp_agent_dir_with_env(home, get_env).join("skills"))
+        }
         Agent::Codex | Agent::Copilot | Agent::Gemini => None,
     }
 }
@@ -363,6 +365,26 @@ mod tests {
         let dir = skills_dir_with_env(Agent::Omp, Path::new("/home/test"), |_| None).unwrap();
 
         assert_eq!(dir, PathBuf::from("/home/test/.omp/agent/skills"));
+    }
+
+    #[test]
+    fn test_skills_dir_omp_respects_pi_config_dir() {
+        let dir = skills_dir_with_env(Agent::Omp, Path::new("/home/test"), |key| {
+            (key == "PI_CONFIG_DIR").then(|| OsString::from("custom-omp"))
+        })
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/home/test/custom-omp/agent/skills"));
+    }
+
+    #[test]
+    fn test_skills_dir_omp_respects_pi_coding_agent_dir() {
+        let dir = skills_dir_with_env(Agent::Omp, Path::new("/home/test"), |key| {
+            (key == "PI_CODING_AGENT_DIR").then(|| OsString::from("/tmp/omp-agent"))
+        })
+        .unwrap();
+
+        assert_eq!(dir, PathBuf::from("/tmp/omp-agent/skills"));
     }
 
     #[test]
