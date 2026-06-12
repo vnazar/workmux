@@ -352,7 +352,7 @@ class TestSetupInstall:
         assert extension_path.exists()
         extension_text = extension_path.read_text()
         assert "@oh-my-pi/pi-coding-agent" in extension_text
-        assert "workmux\", [\"set-window-status" in extension_text
+        assert 'workmux", ["set-window-status' in extension_text
         assert 'pi.on("message_end"' in extension_text
         assert '"role" in event.message' in extension_text
         assert 'event.message.role === "assistant"' in extension_text

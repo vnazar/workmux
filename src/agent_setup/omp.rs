@@ -113,7 +113,9 @@ mod tests {
 
     #[test]
     fn test_extension_tracks_waiting_status() {
-        assert!(EXTENSION_SOURCE.contains("pi.on(\"message_update\""));
+        assert!(EXTENSION_SOURCE.contains("lastStatus"));
+        assert!(EXTENSION_SOURCE.contains("statusQueue"));
+        assert!(EXTENSION_SOURCE.contains("status === lastStatus"));
         assert!(EXTENSION_SOURCE.contains("pi.on(\"message_end\""));
         assert!(EXTENSION_SOURCE.contains("\"role\" in event.message"));
         assert!(EXTENSION_SOURCE.contains("event.message.role === \"assistant\""));

@@ -8,37 +8,52 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
+  let lastStatus: string | undefined;
+  let statusQueue = Promise.resolve();
+
+  function writeStatus(status: string) {
+    return pi.exec("workmux", ["set-window-status", status]).then(() => {}, () => {});
+  }
+
   function setStatus(status: string) {
-    pi.exec("workmux", ["set-window-status", status]).catch(() => {});
+    if (status === lastStatus) {
+      return statusQueue;
+    }
+    lastStatus = status;
+    statusQueue = statusQueue.then(
+      () => writeStatus(status),
+      () => writeStatus(status),
+    );
+    return statusQueue;
   }
 
   pi.on("agent_start", async () => {
-    setStatus("working");
-  });
-
-  pi.on("message_update", async () => {
-    setStatus("working");
+    await setStatus("working");
   });
 
   pi.on("message_end", async (event) => {
     if ("role" in event.message && event.message.role === "assistant") {
-      setStatus("waiting");
+      await setStatus("waiting");
     }
   });
 
   pi.on("tool_call", async (event) => {
     if (event.toolName === "ask") {
-      setStatus("waiting");
+      await setStatus("waiting");
     } else {
-      setStatus("working");
+      await setStatus("working");
     }
   });
 
   pi.on("tool_execution_start", async () => {
-    setStatus("working");
+    await setStatus("working");
   });
 
   pi.on("agent_end", async () => {
-    setStatus("done");
+    if (lastStatus === "done") {
+      return;
+    }
+    lastStatus = "done";
+    await writeStatus("done");
   });
 }

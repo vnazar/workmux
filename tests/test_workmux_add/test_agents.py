@@ -238,9 +238,7 @@ printf '%s' "$1" > omp_prompt.txt
 """,
         )
 
-        write_workmux_config(
-            mux_repo_path, agent="omp", panes=[{"command": "<agent>"}]
-        )
+        write_workmux_config(mux_repo_path, agent="omp", panes=[{"command": "<agent>"}])
 
         worktree_path = add_branch_and_get_worktree(
             env,
