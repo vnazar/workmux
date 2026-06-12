@@ -22,9 +22,11 @@ description: Release notes and version history for workmux
 
 # Changelog
 
-## Unreleased
+## v0.1.213 (2026-06-12)
 
-- Add first-party Oh My Pi (`omp`) support for prompt injection, status setup with waiting detection, skills, and sandbox credential mounts.
+- Add first-party Oh My Pi (`omp`) support for prompt injection, status setup with waiting detection, skills, and sandbox credential mounts. ([#177](https://github.com/raine/workmux/pull/177))
+- Fix dashboard paste handling so pasted input is processed reliably. ([#178](https://github.com/raine/workmux/issues/178))
+- Refresh the sidebar immediately after removing a worktree.
 
 ## v0.1.212 (2026-06-06)
 
