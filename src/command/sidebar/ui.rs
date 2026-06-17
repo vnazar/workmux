@@ -670,6 +670,34 @@ fn status_icon_extra_width(ctx: &RowContext<'_>) -> usize {
     }
 }
 
+/// Session group title: the session name in bold, preceded by a blank line
+/// for groups after the first.
+fn session_header_lines(session: &str, is_first: bool, palette: &ThemePalette) -> Vec<Line<'static>> {
+    let name = Style::default()
+        .fg(palette.header)
+        .add_modifier(Modifier::BOLD);
+    let mut lines = Vec::new();
+    if !is_first {
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::from(Span::styled(format!(" {session}"), name)));
+    lines
+}
+
+/// Full-width faint divider under a session title.
+fn flush_divider(width: usize, color: Color) -> Line<'static> {
+    Line::from(Span::styled("─".repeat(width), Style::default().fg(color)))
+}
+
+/// Faint divider between tiles in a group, aligned with the card stripe (`▌ `).
+fn stripe_divider(width: usize, color: Color) -> Line<'static> {
+    let style = Style::default().fg(color);
+    Line::from(vec![
+        Span::styled("▌ ", style),
+        Span::styled("─".repeat(width.saturating_sub(2)), style),
+    ])
+}
+
 /// Compact single-line-per-agent list (original layout).
 fn render_compact_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
     if app.agents.is_empty() {
@@ -704,24 +732,50 @@ fn render_compact_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
 
     let items: Vec<ListItem> = contexts
         .iter()
-        .map(|ctx| {
+        .enumerate()
+        .map(|(idx, ctx)| {
             let mut spans = render_line_with_options(ctx, &template, width, &render_options);
 
             // Post-pass: apply selection background where the template has
-            // not already supplied an explicit user `bg=`.
+            // not already supplied an explicit user `bg=`. Selection bg is
+            // baked into the row (not a List highlight_style) so the session
+            // header lines below stay unhighlighted.
             if ctx.is_selected {
                 for span in &mut spans {
                     if span.style.bg.is_none() {
                         span.style = span.style.bg(app.palette.highlight_row_bg);
                     }
                 }
+                // Fill the rest of the row so the highlight spans full width.
+                let used: usize = spans.iter().map(|s| display_width(s.content.as_ref())).sum();
+                if used < width {
+                    spans.push(Span::styled(
+                        " ".repeat(width - used),
+                        Style::default().bg(app.palette.highlight_row_bg),
+                    ));
+                }
             }
 
-            ListItem::new(Line::from(spans))
+            // Prepend the session title (group start) plus a faint divider
+            // before each row. Compact has no stripe, so dividers are flush.
+            let mut lines = Vec::new();
+            if app.is_group_start(idx) {
+                lines.extend(session_header_lines(
+                    &app.agents[idx].session,
+                    idx == 0,
+                    &app.palette,
+                ));
+            }
+            lines.push(flush_divider(width, app.palette.border));
+            lines.push(Line::from(spans));
+
+            ListItem::new(lines)
         })
         .collect();
 
-    let list = List::new(items).highlight_style(Style::default().bg(app.palette.highlight_row_bg));
+    // No highlight_style: selection bg is baked into the row content above so
+    // it never bleeds onto session header lines.
+    let list = List::new(items);
 
     f.render_stateful_widget(list, area, &mut app.list_state);
 }
@@ -740,7 +794,6 @@ fn render_tile_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
 
     let sep_width = area.width as usize;
     let selected_idx = app.list_state.selected();
-    let agent_count = app.agents.len();
     let pane_suffixes = compute_pane_suffixes(&app.agents);
     let tile_templates: Vec<_> = app.templates.tiles.clone();
     let body_width = (area.width as usize).saturating_sub(6); // stripe(2) + icon(2) + gap(1) + right margin(1)
@@ -785,13 +838,15 @@ fn render_tile_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
                 String::new()
             };
 
-            // Separator at the top (between tiles, not on first item)
+            // Top of the item: a session title + full-width divider when this
+            // agent starts a group; otherwise a stripe-aligned divider between
+            // tiles of the same group.
             let mut lines = Vec::new();
-            if idx > 0 {
-                lines.push(Line::from(Span::styled(
-                    "─".repeat(sep_width),
-                    Style::default().fg(app.palette.border),
-                )));
+            if app.is_group_start(idx) {
+                lines.extend(session_header_lines(&agent.session, idx == 0, &app.palette));
+                lines.push(flush_divider(sep_width, app.palette.border));
+            } else {
+                lines.push(stripe_divider(sep_width, app.palette.border));
             }
 
             let mut visible_lines = 0;
@@ -850,14 +905,6 @@ fn render_tile_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
             }
 
             tile_heights.push(visible_lines);
-
-            // Bottom separator after the last item
-            if idx == agent_count - 1 {
-                lines.push(Line::from(Span::styled(
-                    "─".repeat(sep_width),
-                    Style::default().fg(app.palette.border),
-                )));
-            }
 
             ListItem::new(lines)
         })
