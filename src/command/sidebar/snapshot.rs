@@ -88,7 +88,8 @@ pub fn build_snapshot(
         .unwrap_or_default()
         .as_secs();
 
-    agents.sort_by_cached_key(|a| {
+    // Per-agent recency key: sleeping last, then most recent, then pane number.
+    let own_key = |a: &AgentPane| -> (bool, u64, u64) {
         let is_sleeping = sleeping_pane_ids.contains(&a.pane_id);
         let elapsed = a
             .status_ts
@@ -101,6 +102,31 @@ pub fn build_snapshot(
             .parse()
             .unwrap_or(u64::MAX);
         (is_sleeping, elapsed, pane_num)
+    };
+
+    // Group by tmux session: order sessions by their most-relevant agent, and
+    // keep agents of the same session contiguous (recency order within group).
+    let mut session_best: HashMap<String, (bool, u64, u64)> = HashMap::new();
+    for a in &agents {
+        let key = own_key(a);
+        session_best
+            .entry(a.session.clone())
+            .and_modify(|best| {
+                if key < *best {
+                    *best = key;
+                }
+            })
+            .or_insert(key);
+    }
+
+    agents.sort_by_cached_key(|a| {
+        let best = session_best
+            .get(&a.session)
+            .copied()
+            .unwrap_or((true, u64::MAX, u64::MAX));
+        // session_best ranks the group; session name breaks ties so sessions
+        // never interleave; own_key orders within the group.
+        (best, a.session.clone(), own_key(a))
     });
 
     // Populate window_id from the tmux state lookup
