@@ -190,6 +190,9 @@ pub struct SidebarApp {
     pub agent_icons: ResolvedAgentIcons,
     /// Cached tile heights for hit testing (updated each render).
     pub tile_heights: Vec<usize>,
+    /// Per-agent flag: true when the agent is the first of its tmux session
+    /// group, so a session header is rendered above it. Indexed like `agents`.
+    pub group_starts: Vec<bool>,
     /// Cached horizontal chip hitboxes for top bar mouse hit testing.
     pub horizontal_hitboxes: Vec<HitBox>,
     /// First agent index rendered in the horizontal top bar.
@@ -260,6 +263,7 @@ impl SidebarApp {
             template_error: Some(template_error),
             agent_icons: ResolvedAgentIcons::default(),
             tile_heights: Vec::new(),
+            group_starts: Vec::new(),
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width: 24,
@@ -334,6 +338,7 @@ impl SidebarApp {
             template_error,
             agent_icons,
             tile_heights: Vec::new(),
+            group_starts: Vec::new(),
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width,
@@ -407,6 +412,15 @@ impl SidebarApp {
             .map(|a| a.pane_id.clone());
 
         self.agents = snapshot.agents;
+
+        // Mark session-group boundaries (agents are already grouped by session
+        // in the snapshot sort, so a boundary is just a session change).
+        self.group_starts = self
+            .agents
+            .iter()
+            .enumerate()
+            .map(|(i, a)| i == 0 || self.agents[i - 1].session != a.session)
+            .collect();
 
         // Restore selection
         if let Some(ref pane_id) = selected_pane {
@@ -570,23 +584,16 @@ impl SidebarApp {
         let relative_row = (row - area.y) as usize;
         let offset = self.list_state.offset();
 
-        match self.layout_mode {
-            SidebarLayoutMode::Compact => {
-                let idx = offset + relative_row;
-                (idx < self.agents.len()).then_some(idx)
+        // Walk variable item heights (both modes can carry session headers).
+        let mut y = 0;
+        for idx in offset..self.agents.len() {
+            let h = self.item_height(idx);
+            if relative_row < y + h {
+                return Some(idx);
             }
-            SidebarLayoutMode::Tiles => {
-                let mut y = 0;
-                for idx in offset..self.agents.len() {
-                    let h = self.tile_item_height(idx);
-                    if relative_row < y + h {
-                        return Some(idx);
-                    }
-                    y += h;
-                }
-                None
-            }
+            y += h;
         }
+        None
     }
 
     pub fn ensure_selected_visible(&mut self, visible_count: usize) {
@@ -600,18 +607,40 @@ impl SidebarApp {
         }
     }
 
+    /// Whether the agent at `idx` is the first of its tmux session group.
+    pub(super) fn is_group_start(&self, idx: usize) -> bool {
+        self.group_starts.get(idx).copied().unwrap_or(false)
+    }
+
+    /// Number of header rows rendered above the agent at `idx`. Zero unless it
+    /// starts a session group; then one row (the session name), plus a leading
+    /// blank line for every group after the first.
+    pub(super) fn group_header_lines(&self, idx: usize) -> usize {
+        if !self.is_group_start(idx) {
+            0
+        } else if idx == 0 {
+            1
+        } else {
+            2
+        }
+    }
+
+    /// Total height in rows of the item at `idx` for the current layout mode.
+    /// Every item carries one divider row; group starts also carry the title
+    /// rows from `group_header_lines`.
+    pub(super) fn item_height(&self, idx: usize) -> usize {
+        match self.layout_mode {
+            SidebarLayoutMode::Compact => 1 + self.group_header_lines(idx) + 1,
+            SidebarLayoutMode::Tiles => self.tile_item_height(idx),
+        }
+    }
+
     /// Height in rows of a tile-mode item at the given index.
-    /// Uses cached heights from the last render pass.
+    /// Uses cached heights from the last render pass, plus the per-item divider
+    /// row and any session title rows.
     fn tile_item_height(&self, idx: usize) -> usize {
         let base = self.tile_heights.get(idx).copied().unwrap_or(3);
-        let mut h = base;
-        if idx > 0 {
-            h += 1; // top separator
-        }
-        if idx == self.agents.len() - 1 {
-            h += 1; // bottom separator
-        }
-        h
+        base + self.group_header_lines(idx) + 1
     }
 
     pub fn jump_to_selected(&mut self) {
