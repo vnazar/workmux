@@ -713,11 +713,17 @@ impl Multiplexer for WezTermBackend {
         Ok(())
     }
 
-    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+    fn paste_text(&self, pane_id: &str, content: &str) -> Result<()> {
         // Without --no-paste, WezTerm uses bracketed paste
         self.wezterm_cmd()
             .args(&["cli", "send-text", "--pane-id", pane_id, content])
             .run()?;
+
+        Ok(())
+    }
+
+    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+        self.paste_text(pane_id, content)?;
 
         // Small delay to let the application process the bracketed paste before sending Enter
         thread::sleep(Duration::from_millis(100));

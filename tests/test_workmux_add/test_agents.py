@@ -210,6 +210,54 @@ printf '%s' "$2" > "{output_filename}"
         )
         assert agent_output.read_text() == prompt_text
 
+    def test_add_uses_omp_agent_from_config(
+        self,
+        mux_server: MuxEnvironment,
+        workmux_exe_path: Path,
+        mux_repo_path: Path,
+        fake_agent_installer: FakeAgentInstaller,
+        shell_cmd: ShellCommands,
+    ):
+        """OMP receives the prompt as a positional argument."""
+        env = mux_server
+        branch_name = "feature-config-omp-agent"
+        window_name = get_window_name(branch_name)
+        prompt_text = "Using configured OMP agent"
+
+        env.configure_default_shell(shell_cmd.path)
+
+        fake_agent_installer.install(
+            "omp",
+            """#!/bin/sh
+set -e
+if [ "$1" = "--" ] || [ "$1" = "-i" ]; then
+    echo "unexpected prompt flag: $1" > omp_error.txt
+    exit 1
+fi
+printf '%s' "$1" > omp_prompt.txt
+""",
+        )
+
+        write_workmux_config(mux_repo_path, agent="omp", panes=[{"command": "<agent>"}])
+
+        worktree_path = add_branch_and_get_worktree(
+            env,
+            workmux_exe_path,
+            mux_repo_path,
+            branch_name,
+            extra_args=f"--prompt {shlex.quote(prompt_text)}",
+        )
+
+        agent_output = worktree_path / "omp_prompt.txt"
+        wait_for_file(
+            env,
+            agent_output,
+            timeout=5.0,
+            window_name=window_name,
+            worktree_path=worktree_path,
+        )
+        assert agent_output.read_text() == prompt_text
+
     def test_add_with_agent_flag_overrides_default(
         self,
         mux_server: MuxEnvironment,

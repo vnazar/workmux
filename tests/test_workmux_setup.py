@@ -142,6 +142,22 @@ class TestSetupNoPrompt:
         )
         assert "All agents have status tracking configured" in result.stdout
 
+    def test_omp_extension_configured(
+        self,
+        mux_server: MuxEnvironment,
+        workmux_exe_path: Path,
+        repo_path: Path,
+    ):
+        """OMP with extension file shows all-configured message."""
+        extension_dir = mux_server.home_path / ".omp" / "agent" / "extensions"
+        extension_dir.mkdir(parents=True)
+        (extension_dir / "workmux-status.ts").write_text("// extension")
+
+        result = run_workmux_command(
+            mux_server, workmux_exe_path, repo_path, "setup --hooks"
+        )
+        assert "All agents have status tracking configured" in result.stdout
+
     def test_both_agents_configured(
         self,
         mux_server: MuxEnvironment,
@@ -310,6 +326,38 @@ class TestSetupInstall:
         assert len(package_json_path.read_text()) > 0
         assert plugin_path.exists()
         assert len(plugin_path.read_text()) > 0
+
+    def test_omp_install_accept(
+        self,
+        mux_server: MuxEnvironment,
+        workmux_exe_path: Path,
+        repo_path: Path,
+    ):
+        """Accepting installs OMP extension file."""
+        omp_dir = mux_server.home_path / ".omp" / "agent"
+        omp_dir.mkdir(parents=True)
+
+        exit_code_file = run_setup_interactive(mux_server, workmux_exe_path)
+        wait_for_pane_output(
+            mux_server, "test", "Install status tracking hooks?", timeout=5.0
+        )
+        mux_server.send_keys("test:", "y")
+        wait_for_pane_output(mux_server, "test", "Install bundled skills?", timeout=5.0)
+        mux_server.send_keys("test:", "n")
+
+        assert poll_until_file_has_content(exit_code_file, timeout=5.0)
+        assert exit_code_file.read_text().strip() == "0"
+
+        extension_path = omp_dir / "extensions" / "workmux-status.ts"
+        assert extension_path.exists()
+        extension_text = extension_path.read_text()
+        assert "@oh-my-pi/pi-coding-agent" in extension_text
+        assert 'workmux", ["set-window-status' in extension_text
+        assert 'pi.on("message_end"' in extension_text
+        assert '"role" in event.message' in extension_text
+        assert 'event.message.role === "assistant"' in extension_text
+        assert 'event.toolName === "ask"' in extension_text
+        assert 'setStatus("waiting")' in extension_text
 
     def test_both_agents_install_accept(
         self,

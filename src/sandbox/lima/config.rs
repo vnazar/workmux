@@ -58,6 +58,19 @@ npm install -g @mariozechner/pi-coding-agent
 "#
         .to_string(),
 
+        "omp" => r#"# Install Python and Bun (required for oh-my-pi)
+sudo apt-get install -y --no-install-recommends python3 python3-pip python3-venv unzip
+export BUN_INSTALL="$HOME/.bun"
+curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.14"
+export PATH="$BUN_INSTALL/bin:$PATH"
+sudo ln -sfn "$BUN_INSTALL/bin/bun" /usr/local/bin/bun
+
+# Install oh-my-pi CLI
+bun install -g @oh-my-pi/pi-coding-agent
+sudo ln -sfn "$BUN_INSTALL/bin/omp" /usr/local/bin/omp
+"#
+        .to_string(),
+
         other => format!("# No built-in install script for agent: {other}\n\
                           # Use sandbox.lima.provision to install it manually.\n"),
     }
@@ -535,6 +548,22 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_lima_config_omp_agent() {
+        let mounts = vec![Mount::rw(PathBuf::from("/tmp/test"))];
+        let sandbox_config = SandboxConfig::default();
+        let yaml = generate_lima_config("test-vm", &mounts, &sandbox_config, "omp", true).unwrap();
+
+        assert!(yaml.contains("@oh-my-pi/pi-coding-agent"));
+        assert!(yaml.contains("bun install -g"));
+        assert!(yaml.contains("python3"));
+        assert!(!yaml.contains("nodesource.com"));
+        assert!(!yaml.contains("npm install -g"));
+        assert!(!yaml.contains("@mariozechner/pi-coding-agent"));
+        assert!(!yaml.contains("claude.ai/install.sh"));
+        assert!(!yaml.contains(".claude.json"));
+    }
+
+    #[test]
     fn test_generate_lima_config_unknown_agent() {
         let mounts = vec![Mount::rw(PathBuf::from("/tmp/test"))];
         let sandbox_config = SandboxConfig::default();
@@ -610,6 +639,19 @@ mod tests {
         let script = lima_install_script_for_agent("pi");
         assert!(script.contains("@mariozechner/pi-coding-agent"));
         assert!(script.contains("npm install -g"));
+    }
+
+    #[test]
+    fn test_lima_install_script_for_agent_omp() {
+        let script = lima_install_script_for_agent("omp");
+        assert!(script.contains("@oh-my-pi/pi-coding-agent"));
+        assert!(script.contains("bun install -g"));
+        assert!(script.contains("python3"));
+        assert!(!script.contains("nodesource.com"));
+        assert!(!script.contains("npm install -g"));
+        assert!(!script.contains("@mariozechner/pi-coding-agent"));
+        assert!(!script.contains("claude.ai/install.sh"));
+        assert!(!script.contains(".claude.json"));
     }
 
     #[test]

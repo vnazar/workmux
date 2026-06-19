@@ -36,11 +36,17 @@ Run `workmux setup` to install all skills automatically:
 workmux setup --skills
 ```
 
-This detects your installed agents and copies skills to the right location. The setup wizard also offers skill installation on first run.
+This detects installed Claude Code, OpenCode, Pi, and Oh My Pi agents and copies skills to the right location. The setup wizard also offers skill installation on first run.
 
 You can also copy skills manually from [`skills/`](https://github.com/raine/workmux/tree/main/skills) to your skills directory:
 
 **Claude Code**: `~/.claude/skills/` (or project `.claude/skills/`). If `CLAUDE_CONFIG_DIR` is set, `workmux setup --skills` installs to `$CLAUDE_CONFIG_DIR/skills/` instead.
+
+**OpenCode**: `~/.config/opencode/skills/`.
+
+**Pi**: `~/.pi/agent/skills/`.
+
+**Oh My Pi**: `~/.omp/agent/skills/`.
 
 ## `/workmux`
 

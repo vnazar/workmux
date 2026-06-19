@@ -74,6 +74,52 @@ printf '%s' "$2" > claude_received.txt
         )
         assert agent_output.read_text() == prompt_text
 
+    def test_literal_omp_known_agent_gets_prompt_injection(
+        self,
+        mux_server: MuxEnvironment,
+        workmux_exe_path: Path,
+        mux_repo_path: Path,
+        fake_agent_installer: FakeAgentInstaller,
+    ):
+        """A literal 'omp' command should auto-detect and inject the prompt."""
+        env = mux_server
+        branch_name = "feature-auto-detect-omp"
+        window_name = get_window_name(branch_name)
+        prompt_text = "auto detected omp prompt"
+
+        fake_agent_installer.install(
+            "omp",
+            """#!/bin/sh
+set -e
+printf '%s' "$1" > omp_received.txt
+""",
+        )
+
+        _write_rc_with_fake_path(env, fake_agent_installer.bin_dir)
+
+        write_workmux_config(
+            mux_repo_path,
+            panes=[{"command": "omp"}],
+        )
+
+        worktree_path = add_branch_and_get_worktree(
+            env,
+            workmux_exe_path,
+            mux_repo_path,
+            branch_name,
+            extra_args=f"--prompt {shlex.quote(prompt_text)}",
+        )
+
+        agent_output = worktree_path / "omp_received.txt"
+        wait_for_file(
+            env,
+            agent_output,
+            timeout=5.0,
+            window_name=window_name,
+            worktree_path=worktree_path,
+        )
+        assert agent_output.read_text() == prompt_text
+
     def test_two_known_agents_each_get_prompt(
         self,
         mux_server: MuxEnvironment,

@@ -39,7 +39,10 @@ pub use app::DashboardTab;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind},
+    event::{
+        self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+        Event, KeyEventKind, MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -137,7 +140,12 @@ pub fn run(
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        EnableBracketedPaste
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
 
@@ -262,7 +270,8 @@ pub fn run(
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
+        DisableBracketedPaste
     )?;
     terminal.show_cursor()?;
 
@@ -302,6 +311,15 @@ fn handle_terminal_event(
     // Handle mouse scroll events in diff view
     if let Event::Mouse(mouse) = &event {
         handle_mouse_event(app, mouse.kind);
+        return;
+    }
+
+    if let Event::Paste(text) = &event {
+        if get_context(app) == Context::DashboardInput {
+            app.paste_text_to_selected(text);
+            app.refresh_preview();
+            *last_preview_refresh = std::time::Instant::now();
+        }
         return;
     }
 

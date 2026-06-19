@@ -254,10 +254,7 @@ pub fn merge(
     if rebase {
         // Rebase the feature branch on top of target inside its own worktree.
         // This is where conflicts will be detected.
-        println!(
-            "Rebasing '{}' onto '{}'...",
-            &branch_to_merge, target_branch
-        );
+        println!("Rebasing '{}' onto '{}'...", branch_to_merge, target_branch);
         info!(
             branch = %branch_to_merge,
             base = target_branch,

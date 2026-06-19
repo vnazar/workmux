@@ -46,7 +46,7 @@ Any allowed command can execute code from project files. For example, an agent c
 ```yaml
 # ~/.config/workmux/config.yaml
 sandbox:
-  host_commands: ['just', 'cargo', 'npm']
+  host_commands: ["just", "cargo", "npm"]
 ```
 
 `host_commands` is only read from your global config. If set in a project's `.workmux.yaml`, it is ignored and a warning is logged. This ensures that only you control which commands get host access, not the projects you clone.
@@ -108,16 +108,18 @@ Both sandbox backends mount agent-specific credential directories from the host.
 | `codex`    | `~/.codex/`                | `/home/user/.codex/`          | `$HOME/.codex/`                |
 | `opencode` | `~/.local/share/opencode/` | `/tmp/.local/share/opencode/` | `$HOME/.local/share/opencode/` |
 | `pi`       | `~/.pi/agent/`             | `/tmp/.pi/agent/`             | `$HOME/.pi/agent/`             |
+| `omp`      | `~/.omp/agent/`            | `/tmp/.omp/agent/`            | `$HOME/.omp/agent/`            |
 
 OpenCode's global config directory (`~/.config/opencode/`) is also mounted read-only, providing access to `opencode.json`, plugins, and global MCP definitions.
 
 Key behaviors:
 
-- Gemini, Codex, and OpenCode store credentials in files. If you've authenticated on the host, the sandbox automatically has access.
+- Gemini, Codex, OpenCode, and OMP store credentials in files. If you've authenticated on the host, the sandbox automatically has access.
 - Claude stores auth in macOS Keychain, which isn't accessible from containers or Linux VMs. You need to authenticate Claude separately inside the sandbox.
 - Authentication done inside the sandbox writes back to the host directory. Credentials persist across sandbox recreations.
 - The credential mount is determined by the `agent` setting. Switching agents requires recreating the sandbox (Lima) or starting a new container.
 - For `pi`, the entire `~/.pi/agent/` is shared except `bin/`. Pi auto-downloads platform-specific `fd` and `rg` binaries into `bin/`, so a Linux sandbox would otherwise overwrite a macOS host's Mach-O binaries through the bind mount. Workmux overlays a per-sandbox, arch-keyed directory on `bin/` to keep host and guest binaries separate.
+- OMP uses file-backed state and credentials mounted from `~/.omp/agent/`.
 
 The container backend also uses a separate config file for Claude, mounted to `/tmp/.claude.json` inside the container. Docker/Podman use `~/.claude-sandbox.json` (file mount); Apple Container uses `~/.claude-sandbox-config/claude.json` (directory mount, since Apple Container only supports directory mounts).
 
@@ -165,7 +167,7 @@ Requests are authenticated with a per-session token passed via the `WM_RPC_TOKEN
 
 ### Agent can't find credentials
 
-Claude stores auth in macOS Keychain, so it must authenticate separately inside containers and VMs. Other agents (Gemini, Codex, OpenCode) use file-based credentials that are shared with the host automatically.
+Claude stores auth in macOS Keychain, so it must authenticate separately inside containers and VMs. Other agents (Gemini, Codex, OpenCode, OMP) use file-based credentials that are shared with the host automatically.
 
 If credentials are missing, start a shell in the sandbox with `workmux sandbox shell` and run the agent to trigger authentication. Credentials written inside the sandbox persist to the host.
 

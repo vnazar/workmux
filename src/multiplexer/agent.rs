@@ -239,6 +239,30 @@ impl AgentProfile for PiProfile {
     }
 }
 
+pub struct OmpProfile;
+
+impl AgentProfile for OmpProfile {
+    fn name(&self) -> &'static str {
+        "omp"
+    }
+
+    fn needs_auto_status(&self) -> bool {
+        true
+    }
+
+    fn prompt_argument(&self, prompt_path: &str) -> String {
+        format!("\"$(cat {})\"", prompt_path)
+    }
+
+    fn auto_name_command(&self) -> Option<&'static str> {
+        Some("omp -p")
+    }
+
+    fn continue_flag(&self) -> Option<&'static str> {
+        Some("--continue")
+    }
+}
+
 pub struct DefaultProfile;
 
 impl AgentProfile for DefaultProfile {
@@ -255,6 +279,7 @@ static PROFILES: &[&dyn AgentProfile] = &[
     &OpenCodeProfile,
     &CodexProfile,
     &PiProfile,
+    &OmpProfile,
     &KiroProfile,
     &VibeProfile,
 ];
@@ -540,6 +565,18 @@ mod tests {
     }
 
     #[test]
+    fn test_omp_profile() {
+        let profile = OmpProfile;
+        assert_eq!(profile.name(), "omp");
+        assert!(!profile.needs_bang_delay());
+        assert!(profile.needs_auto_status());
+        assert_eq!(profile.prompt_argument("PROMPT.md"), "\"$(cat PROMPT.md)\"");
+        assert_eq!(profile.skip_permissions_flag(), None);
+        assert_eq!(profile.auto_name_command(), Some("omp -p"));
+        assert_eq!(profile.continue_flag(), Some("--continue"));
+    }
+
+    #[test]
     fn test_default_profile() {
         let profile = DefaultProfile;
         assert_eq!(profile.name(), "default");
@@ -592,6 +629,12 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_profile_omp() {
+        let profile = resolve_profile(Some("omp"));
+        assert_eq!(profile.name(), "omp");
+    }
+
+    #[test]
     fn test_resolve_profile_codex() {
         let profile = resolve_profile(Some("codex"));
         assert_eq!(profile.name(), "codex");
@@ -630,6 +673,7 @@ mod tests {
         assert!(is_known_agent("codex"));
         assert!(is_known_agent("opencode"));
         assert!(is_known_agent("pi"));
+        assert!(is_known_agent("omp"));
         assert!(is_known_agent("kiro-cli"));
         assert!(is_known_agent("vibe"));
     }
@@ -722,6 +766,7 @@ mod tests {
         assert!(is_known_agent("env -u FOO claude"));
         assert!(is_known_agent("env FOO=bar codex --yolo"));
         assert!(is_known_agent("FOO=bar gemini -i foo"));
+        assert!(is_known_agent("env FOO=bar omp --continue"));
     }
 
     #[test]

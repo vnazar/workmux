@@ -767,6 +767,13 @@ impl Multiplexer for ZellijBackend {
         Ok(())
     }
 
+    fn paste_text(&self, pane_id: &str, content: &str) -> Result<()> {
+        Cmd::new("zellij")
+            .args(&["action", "write-chars", "--pane-id", pane_id, content])
+            .run()?;
+        Ok(())
+    }
+
     fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
         // Send line by line with pane targeting
         for line in content.lines() {

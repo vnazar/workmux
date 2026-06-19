@@ -723,6 +723,11 @@ pub fn reflow(window_id: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Request a sidebar refresh if the daemon is running.
+pub(crate) fn request_refresh() {
+    signal_daemon();
+}
+
 /// Run the sidebar daemon (called by the hidden `_sidebar-daemon` command).
 pub fn run_daemon() -> Result<()> {
     daemon::run()

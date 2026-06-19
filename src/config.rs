@@ -1753,6 +1753,10 @@ impl SandboxConfig {
                 "codex" => Some(home.join(".codex")),
                 "opencode" => Some(home.join(".local/share/opencode")),
                 "pi" => Some(home.join(".pi/agent")),
+                "omp" => Some(crate::agent_setup::omp::omp_agent_dir_with_env(
+                    &home,
+                    |key| std::env::var_os(key),
+                )),
                 _ => None,
             }
         }
@@ -4190,6 +4194,31 @@ extra_mounts:
         let dir = config.resolved_agent_config_dir("claude").unwrap();
         let home = home::home_dir().unwrap();
         assert_eq!(dir, home.join(".claude"));
+        let dir = config.resolved_agent_config_dir("omp").unwrap();
+        assert_eq!(dir, home.join(".omp/agent"));
+    }
+
+    #[test]
+    fn test_resolved_agent_config_dir_omp_with_pi_config_dir() {
+        // SAFETY: this test restores the original value before returning.
+        let prev = std::env::var_os("PI_CONFIG_DIR");
+        unsafe {
+            std::env::set_var("PI_CONFIG_DIR", "custom-omp");
+        }
+
+        let config = SandboxConfig::default();
+        let dir = config.resolved_agent_config_dir("omp").unwrap();
+        let home = home::home_dir().unwrap();
+        assert_eq!(dir, home.join("custom-omp/agent"));
+
+        match prev {
+            Some(v) => unsafe {
+                std::env::set_var("PI_CONFIG_DIR", v);
+            },
+            None => unsafe {
+                std::env::remove_var("PI_CONFIG_DIR");
+            },
+        }
     }
 
     #[test]

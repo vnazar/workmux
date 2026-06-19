@@ -27,6 +27,7 @@ pub enum AgentKind {
     OpenCode,
     Gemini,
     Pi,
+    Omp,
     KiroCli,
     Vibe,
     Copilot,
@@ -42,6 +43,7 @@ impl AgentKind {
             AgentKind::OpenCode => "opencode",
             AgentKind::Gemini => "gemini",
             AgentKind::Pi => "pi",
+            AgentKind::Omp => "omp",
             AgentKind::KiroCli => "kiro-cli",
             AgentKind::Vibe => "vibe",
             AgentKind::Copilot => "copilot",
@@ -56,6 +58,7 @@ impl AgentKind {
             "opencode" => Some(AgentKind::OpenCode),
             "gemini" => Some(AgentKind::Gemini),
             "pi" => Some(AgentKind::Pi),
+            "omp" => Some(AgentKind::Omp),
             "kiro-cli" => Some(AgentKind::KiroCli),
             "vibe" => Some(AgentKind::Vibe),
             "copilot" => Some(AgentKind::Copilot),
@@ -72,6 +75,7 @@ impl AgentKind {
             AgentKind::OpenCode => "OC",
             AgentKind::Gemini => "G",
             AgentKind::Pi => "π",
+            AgentKind::Omp => "⌥",
             AgentKind::KiroCli => "K",
             AgentKind::Vibe => "V",
             AgentKind::Copilot => "CP",
@@ -87,6 +91,7 @@ impl AgentKind {
             AgentKind::OpenCode => "OpenCode",
             AgentKind::Gemini => "Gemini",
             AgentKind::Pi => "Pi",
+            AgentKind::Omp => "Oh My Pi",
             AgentKind::KiroCli => "Kiro",
             AgentKind::Vibe => "Vibe",
             AgentKind::Copilot => "Copilot",
@@ -107,6 +112,7 @@ impl AgentKind {
             AgentKind::Copilot => Color::Rgb(0x89, 0x57, 0xe5),
             AgentKind::Vibe => Color::Rgb(0xff, 0x82, 0x05),
             AgentKind::Pi => Color::Rgb(0x96, 0xbb, 0xb5),
+            AgentKind::Omp => Color::Rgb(0xe0, 0x57, 0x35),
             AgentKind::OpenCode => Color::Blue,
             AgentKind::KiroCli => return None,
         })
@@ -168,10 +174,19 @@ fn classify_by_title(title: &str) -> Option<AgentKind> {
     if title.contains('\u{03C0}') {
         return Some(AgentKind::Pi);
     }
+    if title.contains("Oh My Pi") || contains_omp_ascii_case_insensitive(title) {
+        return Some(AgentKind::Omp);
+    }
     if title.contains("Vibe") {
         return Some(AgentKind::Vibe);
     }
     None
+}
+
+fn contains_omp_ascii_case_insensitive(title: &str) -> bool {
+    title
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|token| token.eq_ignore_ascii_case("omp"))
 }
 
 fn is_generic_interpreter(stem: &str) -> bool {
@@ -247,6 +262,7 @@ mod tests {
         assert_eq!(classify("claude", ""), Some("claude".into()));
         assert_eq!(classify("gemini", ""), Some("gemini".into()));
         assert_eq!(classify("pi", ""), Some("pi".into()));
+        assert_eq!(classify("omp", ""), Some("omp".into()));
         assert_eq!(classify("vibe", ""), Some("vibe".into()));
     }
 
@@ -279,6 +295,22 @@ mod tests {
             classify("node", "\u{03C0} - sidebar-templates"),
             Some("pi".into())
         );
+    }
+
+    #[test]
+    fn generic_interpreter_with_omp_title() {
+        assert_eq!(classify("bun", "omp"), Some("omp".into()));
+        assert_eq!(classify("bun", "OMP"), Some("omp".into()));
+        assert_eq!(classify("bun", "agent: omp"), Some("omp".into()));
+        assert_eq!(classify("python3", "Oh My Pi"), Some("omp".into()));
+    }
+
+    #[test]
+    fn generic_interpreter_with_omp_substring_title_does_not_match() {
+        assert_eq!(classify("bun", "component-tests"), None);
+        assert_eq!(classify("node", "compile server"), None);
+        assert_eq!(classify("python3", "company dashboard"), None);
+        assert_eq!(classify("python3", "completion worker"), None);
     }
 
     #[test]
@@ -340,6 +372,7 @@ mod tests {
             AgentKind::OpenCode,
             AgentKind::Gemini,
             AgentKind::Pi,
+            AgentKind::Omp,
             AgentKind::KiroCli,
             AgentKind::Vibe,
             AgentKind::Copilot,

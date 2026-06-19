@@ -172,6 +172,7 @@ Default icons:
 - `opencode` → `OC`
 - `gemini` → `G`
 - `pi` → `π`
+- `omp` → `⌥`
 - `kiro-cli` → `K`
 - `vibe` → `V`
 - `copilot` → `CP`
@@ -179,7 +180,7 @@ Default icons:
 Unknown agents render an empty icon.
 
 Default colors are brand accents: Claude orange, Codex teal, Gemini blue,
-Copilot purple, Vibe orange, Pi sage, OpenCode blue. Stale rows still dim
+Copilot purple, Vibe orange, Pi sage, OMP red/orange, OpenCode blue. Stale rows still dim
 and selected rows still take the highlight background; the icon color sits
 on top of those.
 

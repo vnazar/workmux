@@ -18,9 +18,10 @@ pub const DOCKERFILE_CODEX: &str = include_str!("../../docker/Dockerfile.codex")
 pub const DOCKERFILE_GEMINI: &str = include_str!("../../docker/Dockerfile.gemini");
 pub const DOCKERFILE_OPENCODE: &str = include_str!("../../docker/Dockerfile.opencode");
 pub const DOCKERFILE_PI: &str = include_str!("../../docker/Dockerfile.pi");
+pub const DOCKERFILE_OMP: &str = include_str!("../../docker/Dockerfile.omp");
 
 /// Known agents that have pre-built images.
-pub const KNOWN_AGENTS: &[&str] = &["claude", "codex", "gemini", "opencode", "pi"];
+pub const KNOWN_AGENTS: &[&str] = &["claude", "codex", "gemini", "opencode", "pi", "omp"];
 
 /// Get the agent-specific Dockerfile content, or None for unknown agents.
 pub fn dockerfile_for_agent(agent: &str) -> Option<&'static str> {
@@ -30,6 +31,7 @@ pub fn dockerfile_for_agent(agent: &str) -> Option<&'static str> {
         "gemini" => Some(DOCKERFILE_GEMINI),
         "opencode" => Some(DOCKERFILE_OPENCODE),
         "pi" => Some(DOCKERFILE_PI),
+        "omp" => Some(DOCKERFILE_OMP),
         _ => None,
     }
 }
@@ -538,6 +540,7 @@ pub fn build_docker_run_args(
             "codex" => "/home/user/.codex",
             "opencode" => "/tmp/.local/share/opencode",
             "pi" => "/tmp/.pi/agent",
+            "omp" => "/tmp/.omp/agent",
             _ => unreachable!(), // resolved_agent_config_dir returns None for unknown agents
         };
         let _ = std::fs::create_dir_all(&config_dir);
@@ -1387,6 +1390,7 @@ mod tests {
         assert!(dockerfile_for_agent("gemini").is_some());
         assert!(dockerfile_for_agent("opencode").is_some());
         assert!(dockerfile_for_agent("pi").is_some());
+        assert!(dockerfile_for_agent("omp").is_some());
     }
 
     #[test]
@@ -2210,6 +2214,42 @@ mod tests {
     }
 
     #[test]
+    fn test_build_args_omp_agent_mounts_config_dir() {
+        use crate::config::{ContainerConfig, SandboxConfig, SandboxRuntime};
+        let config = SandboxConfig {
+            enabled: Some(true),
+            container: ContainerConfig {
+                runtime: Some(SandboxRuntime::AppleContainer),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let args = build_docker_run_args(
+            "omp",
+            &config,
+            "omp",
+            Path::new("/tmp/project"),
+            Path::new("/tmp/project"),
+            &[],
+            None,
+            false,
+        )
+        .unwrap();
+
+        let args_str = args.join(" ");
+        assert!(
+            args_str.contains("/tmp/.omp/agent"),
+            "omp agent config mount missing: {}",
+            args_str
+        );
+        assert!(
+            !args_str.contains("/tmp/.claude.json"),
+            "no claude mount expected for omp"
+        );
+        assert!(!args_str.contains("/tmp/.claude,"));
+    }
+
+    #[test]
     fn test_build_args_pi_agent_overlays_bin_after_parent() {
         use crate::config::SandboxConfig;
         let config = SandboxConfig {
@@ -2271,9 +2311,9 @@ mod tests {
             ..Default::default()
         };
         let args = build_docker_run_args(
-            "claude",
+            "omp",
             &config,
-            "claude",
+            "omp",
             Path::new("/tmp/myproject"),
             Path::new("/tmp/myproject"),
             &[],
@@ -2285,7 +2325,7 @@ mod tests {
         let args_str = args.join(" ");
         assert!(
             !args_str.contains("pi-agent-bin"),
-            "claude agent should not have pi bin overlay"
+            "omp agent should not have pi bin overlay"
         );
     }
 }

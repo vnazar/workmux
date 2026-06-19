@@ -713,7 +713,7 @@ impl Multiplexer for KittyBackend {
         Ok(())
     }
 
-    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+    fn paste_text(&self, pane_id: &str, content: &str) -> Result<()> {
         // Use bracketed paste mode
         self.kitten_cmd()
             .args(&[
@@ -725,6 +725,12 @@ impl Multiplexer for KittyBackend {
             ])
             .run()
             .context("Failed to paste content to pane")?;
+
+        Ok(())
+    }
+
+    fn paste_multiline(&self, pane_id: &str, content: &str) -> Result<()> {
+        self.paste_text(pane_id, content)?;
 
         // Small delay to let the application process the bracketed paste before sending Enter
         thread::sleep(Duration::from_millis(100));

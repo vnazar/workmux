@@ -9,6 +9,7 @@ pub mod codex;
 pub mod copilot;
 pub mod gemini;
 pub mod hooks;
+pub mod omp;
 pub mod opencode;
 pub mod pi;
 
@@ -30,6 +31,8 @@ pub enum Agent {
     Gemini,
     OpenCode,
     Pi,
+    #[serde(rename = "omp")]
+    Omp,
 }
 
 impl Agent {
@@ -41,6 +44,7 @@ impl Agent {
             Agent::Gemini => "Gemini CLI",
             Agent::OpenCode => "OpenCode",
             Agent::Pi => "pi",
+            Agent::Omp => "Oh My Pi",
         }
     }
 
@@ -54,6 +58,7 @@ impl Agent {
             Agent::Gemini,
             Agent::OpenCode,
             Agent::Pi,
+            Agent::Omp,
         ]
     }
 }
@@ -143,6 +148,18 @@ pub fn check_all() -> Vec<AgentCheck> {
         });
     }
 
+    if let Some(reason) = omp::detect() {
+        let status = match omp::check() {
+            Ok(s) => s,
+            Err(e) => StatusCheck::Error(e.to_string()),
+        };
+        results.push(AgentCheck {
+            agent: Agent::Omp,
+            reason,
+            status,
+        });
+    }
+
     if let Some(reason) = opencode::detect() {
         let status = match opencode::check() {
             Ok(s) => s,
@@ -167,6 +184,7 @@ pub fn install(agent: Agent) -> Result<String> {
         Agent::Gemini => gemini::install(),
         Agent::OpenCode => opencode::install(),
         Agent::Pi => pi::install(),
+        Agent::Omp => omp::install(),
     }
 }
 
@@ -179,6 +197,7 @@ pub fn uninstall_one(agent: Agent) -> Result<String> {
         Agent::Gemini => gemini::uninstall(),
         Agent::OpenCode => opencode::uninstall(),
         Agent::Pi => pi::uninstall(),
+        Agent::Omp => omp::uninstall(),
     }
 }
 
@@ -438,6 +457,7 @@ mod tests {
         assert_eq!(Agent::Gemini.name(), "Gemini CLI");
         assert_eq!(Agent::OpenCode.name(), "OpenCode");
         assert_eq!(Agent::Pi.name(), "pi");
+        assert_eq!(Agent::Omp.name(), "Oh My Pi");
     }
 
     #[test]
@@ -454,6 +474,7 @@ mod tests {
             "\"opencode\""
         );
         assert_eq!(serde_json::to_string(&Agent::Pi).unwrap(), "\"pi\"");
+        assert_eq!(serde_json::to_string(&Agent::Omp).unwrap(), "\"omp\"");
     }
 
     #[test]
@@ -470,6 +491,8 @@ mod tests {
         assert_eq!(agent, Agent::OpenCode);
         let agent: Agent = serde_json::from_str("\"pi\"").unwrap();
         assert_eq!(agent, Agent::Pi);
+        let agent: Agent = serde_json::from_str("\"omp\"").unwrap();
+        assert_eq!(agent, Agent::Omp);
     }
 
     #[test]
@@ -496,13 +519,15 @@ mod tests {
         state.declined.insert(Agent::Codex);
         state.declined.insert(Agent::OpenCode);
         state.declined.insert(Agent::Pi);
+        state.declined.insert(Agent::Omp);
 
         let json = serde_json::to_string_pretty(&state).unwrap();
         let deserialized: SetupState = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.declined.len(), 4);
+        assert_eq!(deserialized.declined.len(), 5);
         assert!(deserialized.declined.contains(&Agent::Claude));
         assert!(deserialized.declined.contains(&Agent::Codex));
         assert!(deserialized.declined.contains(&Agent::OpenCode));
+        assert!(deserialized.declined.contains(&Agent::Omp));
     }
 
     #[test]

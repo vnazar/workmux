@@ -19,6 +19,7 @@ Workmux can display the status of the agent in your tmux window list, giving you
 | Codex        | ✅ Supported\*                                                              |
 | Copilot CLI  | ✅ Supported\*                                                              |
 | Pi           | ✅ Supported\*                                                              |
+| Oh My Pi     | ✅ Supported                                                                |
 | Gemini CLI   | ✅ Supported                                                                |
 | Kiro         | [Tracking issue](https://github.com/kirodotdev/Kiro/issues/5440)            |
 | Mistral Vibe | [Tracking issue](https://github.com/mistralai/mistral-vibe/discussions/334) |
@@ -44,7 +45,7 @@ Run `workmux setup` to automatically detect your agent CLIs and install status t
 workmux setup
 ```
 
-This detects Claude Code, Copilot CLI, OpenCode, and Pi by checking for their configuration directories, then offers to install the appropriate hooks. For Claude Code, `CLAUDE_CONFIG_DIR` is respected when locating `settings.json`. Workmux will also prompt you on first run if it detects an agent without status tracking configured.
+This detects Claude Code, Copilot CLI, OpenCode, Pi, and Oh My Pi by checking for their configuration directories, then offers to install the appropriate hooks. For Claude Code, `CLAUDE_CONFIG_DIR` is respected when locating `settings.json`. Workmux will also prompt you on first run if it detects an agent without status tracking configured.
 
 Workmux automatically modifies your tmux `window-status-format` to display the status icons. This happens once per session and only affects the current tmux session (not your global config).
 
@@ -70,6 +71,18 @@ curl -o ~/.pi/agent/extensions/workmux-status.ts \
 ```
 
 Restart pi for the extension to take effect.
+
+## Oh My Pi setup
+
+If you prefer manual setup, copy the workmux status extension to your global OMP extensions directory:
+
+```bash
+mkdir -p ~/.omp/agent/extensions
+curl -o ~/.omp/agent/extensions/workmux-status.ts \
+  https://raw.githubusercontent.com/raine/workmux/main/.omp/extensions/workmux-status.ts
+```
+
+Restart omp for the extension to take effect.
 
 ## OpenCode setup
 

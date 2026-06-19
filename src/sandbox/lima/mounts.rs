@@ -263,6 +263,7 @@ pub fn generate_mounts(
             "codex" => ".codex",
             "opencode" => ".local/share/opencode",
             "pi" => ".pi/agent",
+            "omp" => ".omp/agent",
             _ => unreachable!(),
         };
         let guest_path = lima_guest_home()
@@ -469,6 +470,42 @@ mod tests {
             src.contains("test-vm"),
             "host path should be per-VM: {}",
             src
+        );
+    }
+
+    #[test]
+    fn test_omp_agent_mounts_agent_dir_without_bin_overlay() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_root = init_git_project(tmp.path());
+
+        let mut config = Config::default();
+        config.sandbox.agent_config_dir =
+            Some(format!("{}/agent-cfg/{{agent}}", tmp.path().display()));
+
+        let mounts = generate_mounts(
+            &project_root,
+            IsolationLevel::Project,
+            &config,
+            "test-vm",
+            "omp",
+        )
+        .unwrap();
+
+        assert!(
+            mounts.iter().any(|m| m.guest_path.ends_with(".omp/agent")),
+            "parent .omp/agent mount missing"
+        );
+        assert!(
+            !mounts
+                .iter()
+                .any(|m| m.guest_path.ends_with(".omp/agent/bin")),
+            "omp agent should not get a bin overlay"
+        );
+        assert!(
+            !mounts
+                .iter()
+                .any(|m| m.host_path.to_string_lossy().contains("pi-agent-bin")),
+            "omp agent should not get pi bin overlay"
         );
     }
 

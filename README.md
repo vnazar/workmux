@@ -324,7 +324,7 @@ Each pane supports:
   flag)
 
 Built-in agents (`claude`, `gemini`, `codex`, `opencode`, `kiro-cli`, `vibe`,
-`pi`) are auto-detected when used as literal commands and receive prompt
+`pi`, `omp`) are auto-detected when used as literal commands and receive prompt
 injection automatically, without needing the `<agent>` placeholder or a matching
 `agent` config:
 
@@ -735,7 +735,7 @@ done
 When you provide a prompt via `--prompt`, `--prompt-file`, or `--prompt-editor`,
 workmux automatically injects the prompt into panes running the configured agent
 command (e.g., `claude`, `codex`, `opencode`, `gemini`, `kiro-cli`, `vibe`,
-`pi`, or whatever you've set via the `agent` config or `--agent` flag) without
+`pi`, `omp`, or whatever you've set via the `agent` config or `--agent` flag) without
 requiring any `.workmux.yaml` changes:
 
 - Panes with a command matching the configured agent are automatically started
@@ -760,7 +760,7 @@ LLM. The tool used depends on your configuration:
 
 1. `auto_name.command` is set: uses that command as-is
 2. `config.agent` is a known agent (`claude`, `gemini`, `codex`, `opencode`,
-   `kiro-cli`, `vibe`, `pi`): uses the agent's CLI with a fast/cheap model
+   `kiro-cli`, `vibe`, `pi`, `omp`): uses the agent's CLI with a fast/cheap model
 3. Neither: falls back to the [`llm`](https://llm.datasette.io/) CLI tool
 
 ##### Usage
@@ -811,6 +811,7 @@ When an agent is configured, these commands are used automatically:
 | `opencode` | `opencode run`                                                           |
 | `kiro-cli` | `kiro-cli chat --no-interactive`                                         |
 | `pi`       | `pi -p`                                                                  |
+| `omp`      | `omp -p`                                                                 |
 
 To override back to `llm` when an agent is configured, set
 `auto_name.command: "llm"`.
@@ -1888,6 +1889,7 @@ at-a-glance visibility into what the agent in each window doing.
 | Codex        | ✅ Supported\*                                                              |
 | Copilot CLI  | ✅ Supported\*                                                              |
 | Pi           | ✅ Supported\*                                                              |
+| Oh My Pi    | ✅ Supported                                                                |
 | Gemini CLI   | ✅ Supported                                                                |
 | Kiro         | [Tracking issue](https://github.com/kirodotdev/Kiro/issues/5440)            |
 | Mistral Vibe | [Tracking issue](https://github.com/mistralai/mistral-vibe/discussions/334) |
@@ -1902,8 +1904,8 @@ at-a-glance visibility into what the agent in each window doing.
 
 ### Setup
 
-Run `workmux setup` to automatically detect your agent CLIs, install status
-tracking hooks, and install skills:
+Run `workmux setup` to automatically detect Claude Code, Copilot CLI, OpenCode,
+Pi, Oh My Pi, and other supported agent CLIs, install status tracking hooks, and install skills:
 
 ```bash
 workmux setup
@@ -1957,6 +1959,16 @@ curl -o ~/.config/opencode/plugins/workmux-status.ts \
 ```
 
 Restart OpenCode for the plugin to take effect.
+
+**Oh My Pi**: copy the workmux status extension to your global OMP extensions directory:
+
+```bash
+mkdir -p ~/.omp/agent/extensions
+curl -o ~/.omp/agent/extensions/workmux-status.ts \
+  https://raw.githubusercontent.com/raine/workmux/main/.omp/extensions/workmux-status.ts
+```
+
+Restart omp for the extension to take effect.
 
 ### Customization
 

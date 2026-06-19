@@ -177,7 +177,7 @@ Each pane supports:
 
 - `<agent>`: resolves to the configured agent (from `agent` config or `--agent` flag)
 
-Built-in agents (`claude`, `gemini`, `codex`, `opencode`, `kiro-cli`, `vibe`, `pi`) are auto-detected when used as literal commands and receive prompt injection automatically, without needing the `<agent>` placeholder or a matching `agent` config:
+Built-in agents (`claude`, `gemini`, `codex`, `opencode`, `kiro-cli`, `vibe`, `pi`, `omp`) are auto-detected when used as literal commands and receive prompt injection automatically, without needing the `<agent>` placeholder or a matching `agent` config:
 
 ```yaml
 panes:
@@ -305,7 +305,7 @@ auto_name:
 The command used for branch name generation is resolved in this order:
 
 1. `auto_name.command` is set: uses that command as-is
-2. `agent` is a known agent (`claude`, `gemini`, `codex`, `opencode`, `kiro-cli`, `vibe`, `pi`): uses the agent's CLI with a fast/cheap model automatically
+2. `agent` is a known agent (`claude`, `gemini`, `codex`, `opencode`, `kiro-cli`, `vibe`, `pi`, `omp`): uses the agent's CLI with a fast/cheap model automatically
 3. Neither: falls back to the `llm` CLI (requires installation)
 
 To override back to `llm` when an agent is configured, set `auto_name.command: "llm"`.
