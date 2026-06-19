@@ -231,6 +231,30 @@ fn read_sidebar_layout_mode(config: &Config) -> Option<SidebarLayoutMode> {
     None
 }
 
+/// Read whether agents are grouped by tmux session, from tmux global first,
+/// then settings.json, then config; defaults to true.
+fn read_sidebar_group_by_session(config: &Config) -> bool {
+    if let Ok(output) = Cmd::new("tmux")
+        .args(&["show-option", "-gqv", "@workmux_sidebar_group_by_session"])
+        .run_and_capture_stdout()
+    {
+        match output.trim() {
+            "true" => return true,
+            "false" => return false,
+            _ => {}
+        }
+    }
+
+    if let Ok(store) = StateStore::new()
+        && let Ok(settings) = store.load_settings()
+        && let Some(v) = settings.sidebar_group_by_session
+    {
+        return v;
+    }
+
+    config.sidebar.group_by_session.unwrap_or(true)
+}
+
 /// Read pane IDs manually marked as sleeping from the tmux global option.
 fn read_sleeping_panes() -> HashSet<String> {
     Cmd::new("tmux")
@@ -1434,11 +1458,12 @@ pub fn run() -> Result<()> {
                 .ok();
             let Some(agents) = agents else { continue };
 
-            let (position, layout_mode) = {
+            let (position, layout_mode, group_by_session) = {
                 let cfg = config.lock().unwrap();
                 (
                     super::read_sidebar_position(&cfg),
                     read_sidebar_layout_mode(&cfg).unwrap_or_default(),
+                    read_sidebar_group_by_session(&cfg),
                 )
             };
             let sleeping_pane_ids = read_sleeping_panes();
@@ -1462,6 +1487,7 @@ pub fn run() -> Result<()> {
                     now_ts,
                     position,
                     layout_mode,
+                    group_by_session,
                     git_statuses,
                     pr_statuses,
                     sleeping_pane_ids,
@@ -1634,6 +1660,7 @@ struct TickInput {
     now_ts: u64,
     position: SidebarPosition,
     layout_mode: SidebarLayoutMode,
+    group_by_session: bool,
     git_statuses: HashMap<PathBuf, GitStatus>,
     pr_statuses: HashMap<PathBuf, PrPathEntry>,
     sleeping_pane_ids: HashSet<String>,
@@ -1677,6 +1704,7 @@ fn compute_tick(
         now_ts,
         position,
         layout_mode,
+        group_by_session,
         git_statuses,
         pr_statuses,
         sleeping_pane_ids,
@@ -1714,6 +1742,7 @@ fn compute_tick(
         git_statuses,
         pr_statuses,
         &sleeping_pane_ids,
+        group_by_session,
     );
     snapshot.interrupted_pane_ids = interrupted.clone();
 
@@ -2207,6 +2236,7 @@ mod tests {
                     now_ts,
                     position: SidebarPosition::Left,
                     layout_mode: SidebarLayoutMode::default(),
+                    group_by_session: true,
                     git_statuses: HashMap::new(),
                     pr_statuses: HashMap::new(),
                     sleeping_pane_ids: HashSet::new(),

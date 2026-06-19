@@ -212,6 +212,10 @@ pub struct SidebarConfig {
     /// Layout mode: "compact" or "tiles". Default: "tiles"
     pub layout: Option<String>,
 
+    /// Group agents by tmux session (session headers). Default: true.
+    /// Toggle live with the `s` key in the sidebar.
+    pub group_by_session: Option<bool>,
+
     /// Horizontal bar configuration.
     #[serde(default)]
     pub horizontal: HorizontalSidebarConfig,
@@ -2355,6 +2359,10 @@ impl Config {
             width: project.sidebar.width.or(self.sidebar.width),
             height: project.sidebar.height.or(self.sidebar.height),
             layout: project.sidebar.layout.or(self.sidebar.layout),
+            group_by_session: project
+                .sidebar
+                .group_by_session
+                .or(self.sidebar.group_by_session),
             horizontal: HorizontalSidebarConfig {
                 item_width: project
                     .sidebar

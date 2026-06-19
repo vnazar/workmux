@@ -182,6 +182,10 @@ pub struct GlobalSettings {
     #[serde(default)]
     pub sidebar_layout: Option<String>,
 
+    /// Whether the sidebar groups agents by tmux session
+    #[serde(default)]
+    pub sidebar_group_by_session: Option<bool>,
+
     /// Sidebar width in columns (manual override synced across windows)
     #[serde(default)]
     pub sidebar_width: Option<u16>,

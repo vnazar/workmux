@@ -756,8 +756,9 @@ fn render_compact_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
                 }
             }
 
-            // Prepend the session title (group start) plus a faint divider
-            // before each row. Compact has no stripe, so dividers are flush.
+            // Chrome: session title + divider at group starts, a divider
+            // between rows otherwise, nothing above the very first row when
+            // grouping is off. Compact has no stripe, so dividers are flush.
             let mut lines = Vec::new();
             if app.is_group_start(idx) {
                 lines.extend(session_header_lines(
@@ -765,8 +766,10 @@ fn render_compact_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
                     idx == 0,
                     &app.palette,
                 ));
+                lines.push(flush_divider(width, app.palette.border));
+            } else if idx > 0 {
+                lines.push(flush_divider(width, app.palette.border));
             }
-            lines.push(flush_divider(width, app.palette.border));
             lines.push(Line::from(spans));
 
             ListItem::new(lines)
@@ -845,7 +848,7 @@ fn render_tile_list(f: &mut Frame, app: &mut SidebarApp, area: Rect) {
             if app.is_group_start(idx) {
                 lines.extend(session_header_lines(&agent.session, idx == 0, &app.palette));
                 lines.push(flush_divider(sep_width, app.palette.border));
-            } else {
+            } else if idx > 0 {
                 lines.push(stripe_divider(sep_width, app.palette.border));
             }
 
