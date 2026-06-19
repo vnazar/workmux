@@ -193,6 +193,9 @@ pub struct SidebarApp {
     /// Per-agent flag: true when the agent is the first of its tmux session
     /// group, so a session header is rendered above it. Indexed like `agents`.
     pub group_starts: Vec<bool>,
+    /// Whether agents are grouped by tmux session (headers shown). Toggled
+    /// with `s`; the daemon does the matching sort.
+    pub group_by_session: bool,
     /// Cached horizontal chip hitboxes for top bar mouse hit testing.
     pub horizontal_hitboxes: Vec<HitBox>,
     /// First agent index rendered in the horizontal top bar.
@@ -264,6 +267,7 @@ impl SidebarApp {
             agent_icons: ResolvedAgentIcons::default(),
             tile_heights: Vec::new(),
             group_starts: Vec::new(),
+            group_by_session: true,
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width: 24,
@@ -339,6 +343,7 @@ impl SidebarApp {
             agent_icons,
             tile_heights: Vec::new(),
             group_starts: Vec::new(),
+            group_by_session: true,
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width,
@@ -414,13 +419,18 @@ impl SidebarApp {
         self.agents = snapshot.agents;
 
         // Mark session-group boundaries (agents are already grouped by session
-        // in the snapshot sort, so a boundary is just a session change).
-        self.group_starts = self
-            .agents
-            .iter()
-            .enumerate()
-            .map(|(i, a)| i == 0 || self.agents[i - 1].session != a.session)
-            .collect();
+        // in the snapshot sort, so a boundary is just a session change). When
+        // grouping is off there are no headers.
+        self.group_by_session = snapshot.group_by_session;
+        self.group_starts = if self.group_by_session {
+            self.agents
+                .iter()
+                .enumerate()
+                .map(|(i, a)| i == 0 || self.agents[i - 1].session != a.session)
+                .collect()
+        } else {
+            vec![false; self.agents.len()]
+        };
 
         // Restore selection
         if let Some(ref pane_id) = selected_pane {
@@ -625,22 +635,34 @@ impl SidebarApp {
         }
     }
 
-    /// Total height in rows of the item at `idx` for the current layout mode.
-    /// Every item carries one divider row; group starts also carry the title
-    /// rows from `group_header_lines`.
+    /// Rows of chrome prepended above the agent at `idx`: the session title
+    /// plus its full-width divider when it starts a group, a single divider
+    /// between cards otherwise, and nothing above the very first card when
+    /// grouping is off.
+    pub(super) fn chrome_lines(&self, idx: usize) -> usize {
+        if self.is_group_start(idx) {
+            self.group_header_lines(idx) + 1
+        } else if idx > 0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    /// Total height in rows of the item at `idx` for the current layout mode,
+    /// including its chrome (session title and/or divider).
     pub(super) fn item_height(&self, idx: usize) -> usize {
         match self.layout_mode {
-            SidebarLayoutMode::Compact => 1 + self.group_header_lines(idx) + 1,
+            SidebarLayoutMode::Compact => 1 + self.chrome_lines(idx),
             SidebarLayoutMode::Tiles => self.tile_item_height(idx),
         }
     }
 
     /// Height in rows of a tile-mode item at the given index.
-    /// Uses cached heights from the last render pass, plus the per-item divider
-    /// row and any session title rows.
+    /// Uses cached heights from the last render pass, plus its chrome rows.
     fn tile_item_height(&self, idx: usize) -> usize {
         let base = self.tile_heights.get(idx).copied().unwrap_or(3);
-        base + self.group_header_lines(idx) + 1
+        base + self.chrome_lines(idx)
     }
 
     pub fn jump_to_selected(&mut self) {
@@ -678,6 +700,32 @@ impl SidebarApp {
             settings.sidebar_layout = Some(self.layout_mode.as_str().to_string());
             let _ = store.save_settings(&settings);
         }
+    }
+
+    /// Toggle grouping agents by tmux session. The daemon does the matching
+    /// sort; we persist the choice and nudge it to re-snapshot immediately.
+    pub fn toggle_group_by_session(&mut self) {
+        self.group_by_session = !self.group_by_session;
+        let value = if self.group_by_session { "true" } else { "false" };
+        // Persist to tmux so all sidebar instances pick it up immediately
+        let _ = Cmd::new("tmux")
+            .args(&[
+                "set-option",
+                "-g",
+                "@workmux_sidebar_group_by_session",
+                value,
+            ])
+            .run();
+        // Persist to settings.json so it survives tmux restarts
+        if let Ok(store) = crate::state::StateStore::new()
+            && let Ok(mut settings) = store.load_settings()
+        {
+            settings.sidebar_group_by_session = Some(self.group_by_session);
+            let _ = store.save_settings(&settings);
+        }
+        // Nudge the daemon so the regrouped snapshot comes back without waiting
+        // for the next poll.
+        super::daemon_ctrl::signal_daemon();
     }
 
     /// Toggle the sleeping state of the selected agent.

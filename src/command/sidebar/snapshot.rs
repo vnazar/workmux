@@ -46,6 +46,14 @@ pub struct SidebarSnapshot {
     /// Clients use this to trigger their own per-project config reload.
     #[serde(default)]
     pub config_version: u64,
+    /// Whether agents are grouped by tmux session (sorted contiguously and
+    /// shown with session headers). Toggled with the `s` key.
+    #[serde(default = "default_true")]
+    pub group_by_session: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Build a snapshot from reconciled agents and tmux state.
@@ -63,6 +71,7 @@ pub fn build_snapshot(
     git_statuses: HashMap<PathBuf, GitStatus>,
     pr_statuses: HashMap<PathBuf, PrPathEntry>,
     sleeping_pane_ids: &HashSet<String>,
+    group_by_session: bool,
 ) -> SidebarSnapshot {
     let done_icon = status_icons.done();
     let waiting_icon = status_icons.waiting();
@@ -104,30 +113,35 @@ pub fn build_snapshot(
         (is_sleeping, elapsed, pane_num)
     };
 
-    // Group by tmux session: order sessions by their most-relevant agent, and
-    // keep agents of the same session contiguous (recency order within group).
-    let mut session_best: HashMap<String, (bool, u64, u64)> = HashMap::new();
-    for a in &agents {
-        let key = own_key(a);
-        session_best
-            .entry(a.session.clone())
-            .and_modify(|best| {
-                if key < *best {
-                    *best = key;
-                }
-            })
-            .or_insert(key);
-    }
+    if group_by_session {
+        // Group by tmux session: order sessions by their most-relevant agent,
+        // and keep agents of the same session contiguous (recency within group).
+        let mut session_best: HashMap<String, (bool, u64, u64)> = HashMap::new();
+        for a in &agents {
+            let key = own_key(a);
+            session_best
+                .entry(a.session.clone())
+                .and_modify(|best| {
+                    if key < *best {
+                        *best = key;
+                    }
+                })
+                .or_insert(key);
+        }
 
-    agents.sort_by_cached_key(|a| {
-        let best = session_best
-            .get(&a.session)
-            .copied()
-            .unwrap_or((true, u64::MAX, u64::MAX));
-        // session_best ranks the group; session name breaks ties so sessions
-        // never interleave; own_key orders within the group.
-        (best, a.session.clone(), own_key(a))
-    });
+        agents.sort_by_cached_key(|a| {
+            let best = session_best
+                .get(&a.session)
+                .copied()
+                .unwrap_or((true, u64::MAX, u64::MAX));
+            // session_best ranks the group; session name breaks ties so sessions
+            // never interleave; own_key orders within the group.
+            (best, a.session.clone(), own_key(a))
+        });
+    } else {
+        // Flat list ordered purely by recency.
+        agents.sort_by_cached_key(own_key);
+    }
 
     // Populate window_id from the tmux state lookup
     for agent in &mut agents {
@@ -172,6 +186,7 @@ pub fn build_snapshot(
         sleeping_pane_ids: live_sleeping,
         agents,
         config_version: 0,
+        group_by_session,
     }
 }
 
@@ -233,6 +248,7 @@ mod tests {
             git_statuses,
             pr_statuses,
             &HashSet::new(),
+            true,
         )
     }
 

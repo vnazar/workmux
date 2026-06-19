@@ -712,6 +712,7 @@ mod tests {
             worktree_sort_mode: Some("age".to_string()),
             last_done_cycle: None,
             sidebar_layout: None,
+            sidebar_group_by_session: None,
             sidebar_width: None,
             sidebar_height: None,
         };
