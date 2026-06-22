@@ -196,6 +196,9 @@ pub struct SidebarApp {
     /// Whether agents are grouped by tmux session (headers shown). Toggled
     /// with `s`; the daemon does the matching sort.
     pub group_by_session: bool,
+    /// Short host name, used to avoid promoting a window named like the host
+    /// (tmux auto-rename can leak it into window_name).
+    hostname: String,
     /// Cached horizontal chip hitboxes for top bar mouse hit testing.
     pub horizontal_hitboxes: Vec<HitBox>,
     /// First agent index rendered in the horizontal top bar.
@@ -268,6 +271,7 @@ impl SidebarApp {
             tile_heights: Vec::new(),
             group_starts: Vec::new(),
             group_by_session: true,
+            hostname: String::new(),
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width: 24,
@@ -344,6 +348,7 @@ impl SidebarApp {
             tile_heights: Vec::new(),
             group_starts: Vec::new(),
             group_by_session: true,
+            hostname: query_host_short(),
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width,
@@ -924,6 +929,7 @@ impl SidebarApp {
             &worktree,
             window,
             agent.window_cmd.as_deref(),
+            &self.hostname,
         )
     }
 }
@@ -1371,6 +1377,16 @@ mod tests {
 
 /// Detect this sidebar's host window using TMUX_PANE (stable, one-time).
 /// Returns (session, window_id).
+/// Short host name (`#{host_short}`), used to drop window names that tmux's
+/// automatic-rename leaked from the host. Empty if tmux can't be queried.
+fn query_host_short() -> String {
+    Cmd::new("tmux")
+        .args(&["display-message", "-p", "#{host_short}"])
+        .run_and_capture_stdout()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
 fn detect_host_window() -> (Option<String>, Option<String>) {
     let pane_id = std::env::var("TMUX_PANE").ok().unwrap_or_default();
     let mut args = vec!["display-message", "-p"];
