@@ -199,6 +199,13 @@ pub struct SidebarApp {
     /// Short host name, used to avoid promoting a window named like the host
     /// (tmux auto-rename can leak it into window_name).
     hostname: String,
+    /// Full agent list from the last snapshot, before the filter is applied.
+    /// `agents` is the filtered view actually rendered.
+    all_agents: Vec<AgentPane>,
+    /// Live filter query (`/`). Matches session + title/task by substring.
+    pub filter_text: String,
+    /// Whether the filter prompt is capturing keystrokes.
+    pub filter_active: bool,
     /// Cached horizontal chip hitboxes for top bar mouse hit testing.
     pub horizontal_hitboxes: Vec<HitBox>,
     /// First agent index rendered in the horizontal top bar.
@@ -272,6 +279,9 @@ impl SidebarApp {
             group_starts: Vec::new(),
             group_by_session: true,
             hostname: String::new(),
+            all_agents: Vec::new(),
+            filter_text: String::new(),
+            filter_active: false,
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width: 24,
@@ -349,6 +359,9 @@ impl SidebarApp {
             group_starts: Vec::new(),
             group_by_session: true,
             hostname: query_host_short(),
+            all_agents: Vec::new(),
+            filter_text: String::new(),
+            filter_active: false,
             horizontal_hitboxes: Vec::new(),
             first_visible_agent_idx: 0,
             horizontal_item_width,
@@ -414,28 +427,40 @@ impl SidebarApp {
             self.selection_mode = SelectionMode::FollowHost;
         }
 
-        // Preserve selection by pane_id
+        self.group_by_session = snapshot.group_by_session;
+        self.all_agents = snapshot.agents;
+        // Build the visible list (applies the active filter), recompute group
+        // boundaries and restore selection.
+        self.apply_filter();
+
+        self.sync_selection();
+    }
+
+    /// Rebuild the visible `agents` list from `all_agents` applying the live
+    /// filter, then recompute group boundaries and restore selection by pane_id.
+    /// Cheap (in-memory); safe to call on every filter keystroke and snapshot.
+    pub fn apply_filter(&mut self) {
+        // Preserve selection by pane_id across the rebuild.
         let selected_pane = self
             .list_state
             .selected()
             .and_then(|i| self.agents.get(i))
             .map(|a| a.pane_id.clone());
 
-        self.agents = snapshot.agents;
-
-        // Mark session-group boundaries (agents are already grouped by session
-        // in the snapshot sort, so a boundary is just a session change). When
-        // grouping is off there are no headers.
-        self.group_by_session = snapshot.group_by_session;
-        self.group_starts = if self.group_by_session {
-            self.agents
-                .iter()
-                .enumerate()
-                .map(|(i, a)| i == 0 || self.agents[i - 1].session != a.session)
-                .collect()
+        if self.filter_text.is_empty() {
+            self.agents = self.all_agents.clone();
         } else {
-            vec![false; self.agents.len()]
-        };
+            let query = self.filter_text.to_lowercase();
+            let prefix = self.window_prefix.clone();
+            self.agents = self
+                .all_agents
+                .iter()
+                .filter(|a| Self::matches_filter(a, &query, &prefix))
+                .cloned()
+                .collect();
+        }
+
+        self.recompute_group_starts();
 
         // Restore selection
         if let Some(ref pane_id) = selected_pane {
@@ -453,9 +478,72 @@ impl SidebarApp {
             }
         } else if !self.agents.is_empty() && self.list_state.selected().is_none() {
             self.list_state.select(Some(0));
+        } else if self.agents.is_empty() {
+            self.list_state.select(None);
         }
+    }
 
-        self.sync_selection();
+    /// Mark session-group boundaries on the current `agents`. Agents are already
+    /// grouped by session in the snapshot sort, so a boundary is just a session
+    /// change; when grouping is off there are no headers.
+    fn recompute_group_starts(&mut self) {
+        self.group_starts = if self.group_by_session {
+            self.agents
+                .iter()
+                .enumerate()
+                .map(|(i, a)| i == 0 || self.agents[i - 1].session != a.session)
+                .collect()
+        } else {
+            vec![false; self.agents.len()]
+        };
+    }
+
+    /// Substring match (lowercased) of the filter against an agent's session
+    /// and title/task sources (worktree, window name, pane title).
+    fn matches_filter(agent: &AgentPane, query_lower: &str, window_prefix: &str) -> bool {
+        let (worktree, _) = extract_worktree_name(
+            &agent.session,
+            &agent.window_name,
+            window_prefix,
+            &agent.path,
+        );
+        let mut haystack = format!("{} {} {}", agent.session, worktree, agent.window_name);
+        if let Some(title) = &agent.pane_title {
+            haystack.push(' ');
+            haystack.push_str(title);
+        }
+        haystack.to_lowercase().contains(query_lower)
+    }
+
+    /// Enter filter input mode (`/`).
+    pub fn enter_filter(&mut self) {
+        self.filter_active = true;
+        self.selection_mode = SelectionMode::Manual;
+    }
+
+    /// Append a character to the filter and re-filter.
+    pub fn filter_push(&mut self, c: char) {
+        self.filter_text.push(c);
+        self.apply_filter();
+    }
+
+    /// Delete the last filter character and re-filter.
+    pub fn filter_backspace(&mut self) {
+        self.filter_text.pop();
+        self.apply_filter();
+    }
+
+    /// Cancel the filter: clear the query, leave input mode, show all agents.
+    pub fn filter_cancel(&mut self) {
+        self.filter_text.clear();
+        self.filter_active = false;
+        self.apply_filter();
+    }
+
+    /// Accept the filter: leave input mode but keep the query applied so the
+    /// narrowed list stays and can be navigated.
+    pub fn filter_accept(&mut self) {
+        self.filter_active = false;
     }
 
     /// Select the agent belonging to this sidebar's host window (only in FollowHost mode).

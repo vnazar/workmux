@@ -207,6 +207,24 @@ fn process_event(
             }
         }
         AppEvent::Input(Event::Key(key)) if key.kind == KeyEventKind::Press => {
+            if app.filter_active {
+                // Filter input mode: keystrokes edit the query; arrows navigate
+                // the filtered list; Enter jumps and exits; Esc cancels.
+                match key.code {
+                    KeyCode::Esc => app.filter_cancel(),
+                    KeyCode::Enter => {
+                        app.jump_to_selected();
+                        app.filter_accept();
+                    }
+                    KeyCode::Backspace => app.filter_backspace(),
+                    KeyCode::Down => app.next(),
+                    KeyCode::Up => app.previous(),
+                    KeyCode::Char(c) => app.filter_push(c),
+                    _ => {}
+                }
+                *needs_render = true;
+                return;
+            }
             match (key.code, key.modifiers) {
                 (KeyCode::Char('q'), _)
                 | (KeyCode::Esc, _)
@@ -221,6 +239,7 @@ fn process_event(
                 (KeyCode::Char('g'), _) => app.select_first(),
                 (KeyCode::Char('v'), _) => app.toggle_layout_mode(),
                 (KeyCode::Char('s'), _) => app.toggle_group_by_session(),
+                (KeyCode::Char('/'), _) => app.enter_filter(),
                 (KeyCode::Char('z'), _) => app.toggle_sleeping(),
                 _ => {}
             }
