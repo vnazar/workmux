@@ -107,13 +107,16 @@ enum LabelSource {
 ///
 /// `window_cmd` is the foreground command of the agent's pane; if `None` (non-tmux
 /// backends), the window name is never promoted because we have no way to detect
-/// auto-tracking vs a sticky user-set name.
+/// auto-tracking vs a sticky user-set name. `hostname` is the short host name;
+/// a window named like the host (or `user@host`, or a tmux `[mode]` indicator)
+/// is never promoted.
 pub fn resolve_labels(
     project: &str,
     session: &str,
     worktree: &str,
     window: &str,
     window_cmd: Option<&str>,
+    hostname: &str,
 ) -> (String, String) {
     let candidates: [(LabelSource, &str, bool); 4] = [
         (
@@ -124,7 +127,7 @@ pub fn resolve_labels(
         (
             LabelSource::Window,
             window,
-            is_window_meaningful(window, window_cmd),
+            is_window_meaningful(window, window_cmd, hostname),
         ),
         (
             LabelSource::Session,
@@ -142,10 +145,9 @@ pub fn resolve_labels(
         None => (LabelSource::Project, project.to_string()),
     };
 
-    // Worktree-primary contract: per the plan, the common feature-branch case
-    // keeps project as secondary regardless of other meaningful candidates.
-    // When worktree is demoted, fall through to the next candidate in the chain
-    // and append the worktree so it never disappears.
+    // Worktree-primary contract: the common feature-branch case keeps project as
+    // secondary. When worktree is demoted, fall through to the next candidate in
+    // the chain and append the worktree so it never disappears.
     let secondary = if primary_src == LabelSource::Worktree {
         if !project.is_empty() && project != worktree {
             project.to_string()
@@ -204,7 +206,7 @@ fn is_worktree_meaningful(w: &str) -> bool {
     !w.is_empty() && !matches!(w, "main" | "master")
 }
 
-fn is_window_meaningful(window: &str, cmd: Option<&str>) -> bool {
+fn is_window_meaningful(window: &str, cmd: Option<&str>, hostname: &str) -> bool {
     let Some(cmd) = cmd else {
         return false;
     };
@@ -216,6 +218,17 @@ fn is_window_meaningful(window: &str, cmd: Option<&str>) -> bool {
     // Block generic shell/default names even when they differ from pane_current_command.
     // E.g., a pane running `node` with window name `zsh` should not promote `zsh`.
     if is_generic_window_name(window) {
+        return false;
+    }
+    // tmux's automatic-rename can leak the active pane's title (often the host
+    // name, or `user@host`) into window_name. Never promote those.
+    let hostname = hostname.trim();
+    if window.contains('@') || (!hostname.is_empty() && window.eq_ignore_ascii_case(hostname)) {
+        return false;
+    }
+    // tmux mode/flag indicators from automatic-rename-format (e.g. `[tmux]`
+    // while a pane is in copy-mode, `[dead]`) are bracketed; never promote them.
+    if window.starts_with('[') && window.ends_with(']') {
         return false;
     }
     // tmux's #{automatic_rename} flag is unreliable; comparing window_name against
@@ -301,6 +314,17 @@ pub fn strip_oc_title_prefix(mut title: &str) -> &str {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// Shorthand for the common case: no host name.
+    fn rl(
+        project: &str,
+        session: &str,
+        worktree: &str,
+        window: &str,
+        cmd: Option<&str>,
+    ) -> (String, String) {
+        resolve_labels(project, session, worktree, window, cmd, "")
+    }
 
     #[test]
     fn test_extract_worktree_name_window_mode() {
@@ -408,7 +432,7 @@ mod tests {
     #[test]
     fn resolve_labels_feature_branch_keeps_worktree_primary() {
         // Common case: feature-branch worktree, project as secondary.
-        let (primary, secondary) = resolve_labels("api", "api", "fix-auth", "zsh", Some("zsh"));
+        let (primary, secondary) = rl("api", "api", "fix-auth", "zsh", Some("zsh"));
         assert_eq!(primary, "fix-auth");
         assert_eq!(secondary, "api");
     }
@@ -417,7 +441,7 @@ mod tests {
     fn resolve_labels_promotes_sticky_window_on_main_worktree() {
         // Multiple agents on `main` with sticky tmux window names.
         let (primary, secondary) =
-            resolve_labels("api", "api", "main", "db-migration", Some("sleep"));
+            rl("api", "api", "main", "db-migration", Some("sleep"));
         assert_eq!(primary, "db-migration");
         assert_eq!(secondary, "api · main");
     }
@@ -426,7 +450,7 @@ mod tests {
     fn resolve_labels_promotes_session_when_window_auto_tracks() {
         // Session-per-project: session name carries identity, window auto-tracks shell.
         let (primary, secondary) =
-            resolve_labels("monorepo", "frontend-refactor", "main", "zsh", Some("zsh"));
+            rl("monorepo", "frontend-refactor", "main", "zsh", Some("zsh"));
         assert_eq!(primary, "frontend-refactor");
         assert_eq!(secondary, "monorepo · main");
     }
@@ -434,7 +458,7 @@ mod tests {
     #[test]
     fn resolve_labels_falls_back_to_project_when_nothing_else_meaningful() {
         // Numeric session, auto-tracked window, main worktree → project wins.
-        let (primary, secondary) = resolve_labels("api", "0", "main", "zsh", Some("zsh"));
+        let (primary, secondary) = rl("api", "0", "main", "zsh", Some("zsh"));
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
@@ -442,21 +466,21 @@ mod tests {
     #[test]
     fn resolve_labels_window_never_promoted_without_cmd() {
         // Non-tmux backends pass None for window_cmd; window must not be promoted.
-        let (primary, secondary) = resolve_labels("api", "api", "main", "looks-meaningful", None);
+        let (primary, secondary) = rl("api", "api", "main", "looks-meaningful", None);
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
 
     #[test]
     fn resolve_labels_session_equal_to_project_not_meaningful() {
-        let (primary, secondary) = resolve_labels("api", "api", "main", "zsh", Some("zsh"));
+        let (primary, secondary) = rl("api", "api", "main", "zsh", Some("zsh"));
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
 
     #[test]
     fn resolve_labels_default_session_not_meaningful() {
-        let (primary, secondary) = resolve_labels("api", "default", "main", "zsh", Some("zsh"));
+        let (primary, secondary) = rl("api", "default", "main", "zsh", Some("zsh"));
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
@@ -464,7 +488,7 @@ mod tests {
     #[test]
     fn resolve_labels_master_treated_like_main() {
         let (primary, secondary) =
-            resolve_labels("api", "release-prep", "master", "zsh", Some("zsh"));
+            rl("api", "release-prep", "master", "zsh", Some("zsh"));
         assert_eq!(primary, "release-prep");
         assert_eq!(secondary, "api · master");
     }
@@ -472,7 +496,7 @@ mod tests {
     #[test]
     fn resolve_labels_worktree_primary_keeps_project_secondary_even_with_sticky_window() {
         let (primary, secondary) =
-            resolve_labels("api", "session-x", "fix-auth", "scratchpad", Some("zsh"));
+            rl("api", "session-x", "fix-auth", "scratchpad", Some("zsh"));
         assert_eq!(primary, "fix-auth");
         assert_eq!(secondary, "api");
     }
@@ -480,21 +504,21 @@ mod tests {
     #[test]
     fn resolve_labels_window_zsh_not_promoted_when_pane_runs_node() {
         // Generic window names are blocklisted even when they differ from cmd.
-        let (primary, secondary) = resolve_labels("api", "0", "main", "zsh", Some("node"));
+        let (primary, secondary) = rl("api", "0", "main", "zsh", Some("node"));
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
 
     #[test]
     fn resolve_labels_window_default_blocked() {
-        let (primary, secondary) = resolve_labels("api", "0", "main", "default", Some("node"));
+        let (primary, secondary) = rl("api", "0", "main", "default", Some("node"));
         assert_eq!(primary, "api");
         assert_eq!(secondary, "main");
     }
 
     #[test]
     fn resolve_labels_worktree_primary_no_project_yields_empty_secondary() {
-        let (primary, secondary) = resolve_labels("", "", "fix-auth", "", None);
+        let (primary, secondary) = rl("", "", "fix-auth", "", None);
         assert_eq!(primary, "fix-auth");
         assert_eq!(secondary, "");
     }
@@ -502,7 +526,7 @@ mod tests {
     #[test]
     fn resolve_labels_blocks_pwsh_powershell_nu() {
         for shell in ["pwsh", "powershell", "nu", "csh", "tcsh", "xonsh", "elvish"] {
-            let (primary, _) = resolve_labels("api", "0", "main", shell, Some("node"));
+            let (primary, _) = rl("api", "0", "main", shell, Some("node"));
             assert_eq!(primary, "api", "expected {shell} to be blocked");
         }
     }
@@ -510,10 +534,49 @@ mod tests {
     #[test]
     fn resolve_labels_trims_whitespace_in_predicates() {
         // Whitespace-padded generic values must not bypass meaningfulness checks.
-        let (primary, _) = resolve_labels("api", " default ", "main", " zsh ", Some("zsh"));
+        let (primary, _) = rl("api", " default ", "main", " zsh ", Some("zsh"));
         assert_eq!(primary, "api");
 
-        let (primary, _) = resolve_labels("api", " 0 ", " main ", " zsh ", Some("zsh"));
+        let (primary, _) = rl("api", " 0 ", " main ", " zsh ", Some("zsh"));
+        assert_eq!(primary, "api");
+    }
+
+    #[test]
+    fn resolve_labels_hostname_window_not_promoted() {
+        // tmux auto-rename leaked the host name into window_name; it must not be
+        // the title — falls through to session/project.
+        let (primary, secondary) = resolve_labels(
+            "conversations",
+            "conversations",
+            "main",
+            "Vicentes-MacBook-Pro",
+            Some("fish"),
+            "Vicentes-MacBook-Pro",
+        );
+        assert_eq!(primary, "conversations");
+        assert_eq!(secondary, "main");
+    }
+
+    #[test]
+    fn resolve_labels_bracketed_tmux_indicator_not_promoted() {
+        // `[tmux]` (copy-mode indicator from automatic-rename-format) must not
+        // be the title; falls through to session/project.
+        let (primary, _) = resolve_labels(
+            "conversations",
+            "conversations",
+            "main",
+            "[tmux]",
+            Some("fish"),
+            "somehost",
+        );
+        assert_eq!(primary, "conversations");
+    }
+
+    #[test]
+    fn resolve_labels_user_at_host_window_not_promoted() {
+        // `user@host` window names are never promoted.
+        let (primary, _) =
+            resolve_labels("api", "0", "main", "vicente@host", Some("node"), "otherhost");
         assert_eq!(primary, "api");
     }
 
