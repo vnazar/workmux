@@ -455,12 +455,42 @@ pub fn render_sidebar(f: &mut Frame, app: &mut SidebarApp) {
     let inner = block.inner(area);
     f.render_widget(block, area);
     let list_area = render_template_error(f, app, inner);
+    let list_area = render_filter_prompt(f, app, list_area);
     app.list_area = list_area;
 
     match app.layout_mode {
         SidebarLayoutMode::Compact => render_compact_list(f, app, list_area),
         SidebarLayoutMode::Tiles => render_tile_list(f, app, list_area),
     }
+}
+
+/// When the filter is active (or has a query), reserve the bottom row for a
+/// `/<query>` prompt and return the remaining area for the list.
+fn render_filter_prompt(f: &mut Frame, app: &SidebarApp, area: Rect) -> Rect {
+    if !app.filter_active && app.filter_text.is_empty() {
+        return area;
+    }
+    if area.height < 2 {
+        return area;
+    }
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(area);
+
+    let cursor = if app.filter_active { "_" } else { "" };
+    let left = format!("/{}{}", app.filter_text, cursor);
+    let count = format!(" {} ", app.agents.len());
+    let width = chunks[1].width as usize;
+    let used = display_width(&left) + display_width(&count);
+    let gap = width.saturating_sub(used);
+    let line = Line::from(vec![
+        Span::styled(left, Style::default().fg(app.palette.text)),
+        Span::raw(" ".repeat(gap)),
+        Span::styled(count, Style::default().fg(app.palette.dimmed)),
+    ]);
+    f.render_widget(Paragraph::new(line), chunks[1]);
+    chunks[0]
 }
 
 fn render_template_error(f: &mut Frame, app: &SidebarApp, area: Rect) -> Rect {
